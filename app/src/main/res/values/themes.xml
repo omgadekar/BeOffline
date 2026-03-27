@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base theme: uses Theme.Material3.DayNight which is available from Material3 lib.
+         Compose takes over all UI rendering so the XML theme just needs to be a valid base. -->
+    <style name="Theme.BeOffline" parent="android:Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
+    </style>
+</resources>

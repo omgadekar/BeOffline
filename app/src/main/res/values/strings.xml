@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BeOffline</string>
+    <string name="vpn_service_label">BeOffline VPN</string>
+    <string name="notification_channel_name">BeOffline VPN Status</string>
+    <string name="notification_channel_desc">Shows which apps are currently offline</string>
+</resources>
