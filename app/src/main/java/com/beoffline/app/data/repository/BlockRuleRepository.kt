@@ -39,9 +39,13 @@ class BlockRuleRepository @Inject constructor(
         val pm = context.packageManager
         pm.getInstalledApplications(PackageManager.GET_META_DATA)
             .filter { appInfo ->
-                // Filter out system apps (keep user-installed apps only)
-                (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0 &&
-                // Must have a launcher activity (be a foreground app)
+                val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                val isUpdatedSystemApp = (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+                // Include:
+                //  • All user-installed apps (not system)
+                //  • System apps that were updated via Play Store (YouTube, Gmail, Chrome, etc.)
+                (!isSystemApp || isUpdatedSystemApp) &&
+                // Must have a launcher activity (visible, tappable app)
                 pm.getLaunchIntentForPackage(appInfo.packageName) != null &&
                 // Exclude ourselves
                 appInfo.packageName != context.packageName
@@ -50,7 +54,8 @@ class BlockRuleRepository @Inject constructor(
                 AppInfo(
                     packageName = appInfo.packageName,
                     appName = appInfo.loadLabel(pm).toString(),
-                    isSystemApp = false
+                    isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                    icon = try { appInfo.loadIcon(pm) } catch (e: Exception) { null }
                 )
             }
             .sortedBy { it.appName.lowercase() }
