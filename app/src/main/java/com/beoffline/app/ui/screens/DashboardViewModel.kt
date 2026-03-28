@@ -3,6 +3,8 @@ package com.beoffline.app.ui.screens
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.beoffline.app.background.BackgroundProtectionManager
+import com.beoffline.app.background.BackgroundProtectionStatus
 import com.beoffline.app.data.model.AppInfo
 import com.beoffline.app.data.model.BlockRule
 import com.beoffline.app.data.model.RuleType
@@ -26,23 +28,28 @@ data class DashboardUiState(
     val rules: List<BlockRule> = emptyList(),
     val activeRules: List<BlockRule> = emptyList(),
     val appInfosByRule: Map<Int, List<AppInfo>> = emptyMap(),
+    val backgroundProtection: BackgroundProtectionStatus? = null,
+    val showWelcomeDialog: Boolean = false,
     val isLoading: Boolean = false
 )
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val backgroundProtectionManager: BackgroundProtectionManager,
     private val repository: BlockRuleRepository,
     private val vpnController: VpnController,
     private val vpnStateManager: VpnStateManager
 ) : ViewModel() {
 
+    private val preferences = context.getSharedPreferences("dashboard_ui", Context.MODE_PRIVATE)
     private val _uiState = MutableStateFlow(DashboardUiState(isLoading = true))
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
         observeRules()
         observeVpnState()
+        refreshBackgroundProtection()
     }
 
     private fun observeRules() {
@@ -132,6 +139,33 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    fun refreshBackgroundProtection() {
+        val status = backgroundProtectionManager.getStatus()
+        _uiState.update {
+            it.copy(
+                backgroundProtection = status,
+                showWelcomeDialog = !status.needsAttention && !hasSeenWelcomeDialog()
+            )
+        }
+    }
+
+    fun openBatteryOptimizationSettings() {
+        backgroundProtectionManager.openBatteryOptimizationFlow()
+    }
+
+    fun openExactAlarmSettings() {
+        backgroundProtectionManager.openExactAlarmSettings()
+    }
+
+    fun openAppSettings() {
+        backgroundProtectionManager.openAppDetailsSettings()
+    }
+
+    fun dismissWelcomeDialog() {
+        preferences.edit().putBoolean(KEY_WELCOME_DIALOG_SEEN, true).apply()
+        _uiState.update { it.copy(showWelcomeDialog = false) }
+    }
+
     private suspend fun deactivateRuleInternal(rule: BlockRule) {
         repository.setRuleActive(rule.id, false)
         if (rule.ruleType == RuleType.TIMER) {
@@ -145,5 +179,13 @@ class DashboardViewModel @Inject constructor(
         } else {
             vpnController.startVpn(remaining.flatMap { it.blockedPackages }.distinct())
         }
+    }
+
+    private fun hasSeenWelcomeDialog(): Boolean {
+        return preferences.getBoolean(KEY_WELCOME_DIALOG_SEEN, false)
+    }
+
+    private companion object {
+        const val KEY_WELCOME_DIALOG_SEEN = "welcome_dialog_seen"
     }
 }

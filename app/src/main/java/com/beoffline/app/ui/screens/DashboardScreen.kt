@@ -24,9 +24,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -37,6 +40,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.rounded.PhoneDisabled
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,6 +55,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,8 +69,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.beoffline.app.background.BackgroundProtectionStatus
 import com.beoffline.app.data.model.AppInfo
 import com.beoffline.app.data.model.BlockRule
 import com.beoffline.app.data.model.RuleType
@@ -126,6 +136,17 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshBackgroundProtection()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         containerColor = Brand900,
@@ -134,6 +155,7 @@ fun DashboardScreen(
                 onClick = onCreateRule,
                 icon = { Icon(Icons.Default.Add, contentDescription = "New Rule") },
                 text = { Text("New Rule") },
+                modifier = Modifier.padding(bottom = 12.dp),
                 containerColor = AccentPrimary,
                 contentColor = Color.White
             )
@@ -184,6 +206,20 @@ fun DashboardScreen(
             }
 
             item { Spacer(modifier = Modifier.height(72.dp)) }
+        }
+    }
+
+    when {
+        uiState.backgroundProtection?.needsAttention == true -> {
+            BackgroundProtectionDialog(
+                status = uiState.backgroundProtection,
+                onBatteryClick = viewModel::openBatteryOptimizationSettings,
+                onExactAlarmClick = viewModel::openExactAlarmSettings,
+                onAppSettingsClick = viewModel::openAppSettings
+            )
+        }
+        uiState.showWelcomeDialog -> {
+            WelcomeDialog(onContinue = viewModel::dismissWelcomeDialog)
         }
     }
 }
@@ -439,6 +475,364 @@ private fun EmptyRulesPrompt() {
             text = "Tap '+' to silence your first app",
             style = MaterialTheme.typography.bodyMedium,
             color = TextDisabled
+        )
+    }
+}
+
+@Composable
+private fun WelcomeDialog(onContinue: () -> Unit) {
+    val scrollState = rememberScrollState()
+
+    Dialog(onDismissRequest = {}) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(30.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF20264B), Brand800, Color(0xFF11152A))
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = AccentSecondary.copy(alpha = 0.28f),
+                    shape = RoundedCornerShape(30.dp)
+                )
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(150.dp)
+                    .clip(CircleShape)
+                    .background(AccentPrimary.copy(alpha = 0.10f))
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(AccentPrimary, AccentSecondary)
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.PhoneDisabled,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(AccentPrimary.copy(alpha = 0.16f))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "Welcome to BeOffline",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AccentSecondary
+                            )
+                        }
+                        Text(
+                            text = "Go Truly Offline",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = TextPrimary
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Cut the internet for any app so you can focus without fake availability.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TextSecondary
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    WelcomeFeatureCard(
+                        title = "Take your space back",
+                        body = "That one person whose message instantly kills your mood? Their texts can wait. Not forever - just until you're ready."
+                    )
+                    WelcomeFeatureCard(
+                        title = "Silence that actually sticks",
+                        body = "Tired of WhatsApp interrupting your focus? Block any app from the internet entirely - not just the notifications. Messages stop arriving, senders see a single gray tick, and you stay genuinely unreachable."
+                    )
+                    WelcomeFeatureCard(
+                        title = "Use apps without reopening the floodgates",
+                        body = "Your apps still work, just offline. Open WhatsApp to send a voice note, use Instagram to post - without your inbox flooding the moment you do."
+                    )
+                    WelcomeFeatureCard(
+                        title = "Your rules, your timing",
+                        body = "Any app. Any schedule. Your rules. Set a timer, pick a time slot, or block instantly. You decide who reaches you and when."
+                    )
+                }
+
+                Button(
+                    onClick = onContinue,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                ) {
+                    Text("Let's Go Offline", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WelcomeFeatureCard(title: String, body: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.04f))
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.06f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(AccentSecondary)
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun BackgroundProtectionDialog(
+    status: BackgroundProtectionStatus?,
+    onBatteryClick: () -> Unit,
+    onExactAlarmClick: () -> Unit,
+    onAppSettingsClick: () -> Unit
+) {
+    if (status == null) return
+
+    AlertDialog(
+        onDismissRequest = {},
+        title = {
+            Text(
+                text = "Allow Background Access",
+                style = MaterialTheme.typography.titleLarge,
+                color = TextPrimary
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "BeOffline needs these settings before it can reliably keep rules active in the background.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+
+                ProtectionStatusRow(
+                    title = "Battery optimization",
+                    ok = status.batteryOptimizationIgnored,
+                    okLabel = "Allowed",
+                    actionLabel = "Required"
+                )
+                ProtectionStatusRow(
+                    title = "Reliable timers",
+                    ok = status.exactAlarmAllowed,
+                    okLabel = "Allowed",
+                    actionLabel = "Required"
+                )
+
+                if (!status.batteryOptimizationIgnored) {
+                    Button(
+                        onClick = onBatteryClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                    ) {
+                        Text("Allow Background Activity")
+                    }
+                }
+
+                if (!status.exactAlarmAllowed) {
+                    Button(
+                        onClick = onExactAlarmClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Brand700)
+                    ) {
+                        Text("Allow Reliable Timers")
+                    }
+                }
+
+                TextButton(
+                    onClick = onAppSettingsClick,
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("Open App Settings", color = AccentSecondary)
+                }
+
+                if (status.manufacturerInstructions.isNotEmpty()) {
+                    Text(
+                        text = "${status.manufacturer} tips",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TextPrimary
+                    )
+                    status.manufacturerInstructions.forEach { step ->
+                        Text(
+                            text = "- $step",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {},
+        containerColor = Brand800
+    )
+}
+
+@Composable
+private fun BackgroundProtectionCard(
+    status: BackgroundProtectionStatus,
+    onBatteryClick: () -> Unit,
+    onExactAlarmClick: () -> Unit,
+    onAppSettingsClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Brand800),
+        border = BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.22f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Keep BeOffline Running", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+            Text(
+                text = "Some phones aggressively sleep background apps. These settings make BeOffline much more reliable.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary
+            )
+
+            ProtectionStatusRow(
+                title = "Battery optimization",
+                ok = status.batteryOptimizationIgnored,
+                okLabel = "Unrestricted",
+                actionLabel = "Needs approval"
+            )
+            ProtectionStatusRow(
+                title = "Exact alarms",
+                ok = status.exactAlarmAllowed,
+                okLabel = "Allowed",
+                actionLabel = "Needs approval"
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!status.batteryOptimizationIgnored) {
+                    Button(
+                        onClick = onBatteryClick,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                    ) {
+                        Text("Allow Battery")
+                    }
+                }
+                if (!status.exactAlarmAllowed) {
+                    Button(
+                        onClick = onExactAlarmClick,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Brand700)
+                    ) {
+                        Text("Allow Alarms")
+                    }
+                }
+            }
+
+            TextButton(
+                onClick = onAppSettingsClick,
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text("Open App Settings", color = AccentSecondary)
+            }
+
+            if (status.manufacturerInstructions.isNotEmpty()) {
+                Text(
+                    text = "${status.manufacturer} tips",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TextPrimary
+                )
+                status.manufacturerInstructions.forEach { step ->
+                    Text(
+                        text = "• $step",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProtectionStatusRow(
+    title: String,
+    ok: Boolean,
+    okLabel: String,
+    actionLabel: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+        Text(
+            text = if (ok) okLabel else actionLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (ok) StatusActive else StatusDanger
         )
     }
 }

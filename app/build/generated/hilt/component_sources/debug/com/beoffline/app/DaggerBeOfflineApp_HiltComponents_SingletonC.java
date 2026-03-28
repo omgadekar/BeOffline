@@ -12,6 +12,7 @@ import androidx.lifecycle.SavedStateHandle;
 import androidx.lifecycle.ViewModel;
 import androidx.work.ListenableWorker;
 import androidx.work.WorkerParameters;
+import com.beoffline.app.background.BackgroundProtectionManager;
 import com.beoffline.app.data.local.BeOfflineDatabase;
 import com.beoffline.app.data.local.BlockRuleDao;
 import com.beoffline.app.data.repository.BlockRuleRepository;
@@ -21,6 +22,8 @@ import com.beoffline.app.receiver.BootReceiver;
 import com.beoffline.app.receiver.BootReceiver_MembersInjector;
 import com.beoffline.app.receiver.ScheduleAlarmReceiver;
 import com.beoffline.app.receiver.ScheduleAlarmReceiver_MembersInjector;
+import com.beoffline.app.receiver.VpnRecoveryReceiver;
+import com.beoffline.app.receiver.VpnRecoveryReceiver_MembersInjector;
 import com.beoffline.app.scheduler.StartRuleWorker;
 import com.beoffline.app.scheduler.StartRuleWorker_AssistedFactory;
 import com.beoffline.app.scheduler.StopRuleWorker;
@@ -34,6 +37,8 @@ import com.beoffline.app.ui.screens.RuleCreatorViewModel_HiltModules;
 import com.beoffline.app.vpn.BeOfflineVpnService;
 import com.beoffline.app.vpn.BeOfflineVpnService_MembersInjector;
 import com.beoffline.app.vpn.VpnController;
+import com.beoffline.app.vpn.VpnHealthWorker;
+import com.beoffline.app.vpn.VpnHealthWorker_AssistedFactory;
 import com.beoffline.app.vpn.VpnStateManager;
 import dagger.hilt.android.ActivityRetainedLifecycle;
 import dagger.hilt.android.ViewModelLifecycle;
@@ -423,20 +428,20 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
-      static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
-
       static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
 
       static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
 
-      @KeepFieldType
-      DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
+      static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
 
       @KeepFieldType
       RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
 
       @KeepFieldType
       AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
+
+      @KeepFieldType
+      DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
     }
   }
 
@@ -526,7 +531,7 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
           return (T) new AppPickerViewModel(singletonCImpl.blockRuleRepositoryProvider.get());
 
           case 1: // com.beoffline.app.ui.screens.DashboardViewModel 
-          return (T) new DashboardViewModel(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule), singletonCImpl.blockRuleRepositoryProvider.get(), singletonCImpl.vpnControllerProvider.get(), singletonCImpl.vpnStateManagerProvider.get());
+          return (T) new DashboardViewModel(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule), singletonCImpl.backgroundProtectionManagerProvider.get(), singletonCImpl.blockRuleRepositoryProvider.get(), singletonCImpl.vpnControllerProvider.get(), singletonCImpl.vpnStateManagerProvider.get());
 
           case 2: // com.beoffline.app.ui.screens.RuleCreatorViewModel 
           return (T) new RuleCreatorViewModel(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule), singletonCImpl.blockRuleRepositoryProvider.get(), viewModelCImpl.savedStateHandle);
@@ -635,6 +640,10 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
 
     private Provider<StopRuleWorker_AssistedFactory> stopRuleWorker_AssistedFactoryProvider;
 
+    private Provider<VpnHealthWorker_AssistedFactory> vpnHealthWorker_AssistedFactoryProvider;
+
+    private Provider<BackgroundProtectionManager> backgroundProtectionManagerProvider;
+
     private SingletonCImpl(ApplicationContextModule applicationContextModuleParam) {
       this.applicationContextModule = applicationContextModuleParam;
       initialize(applicationContextModuleParam);
@@ -643,7 +652,7 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
 
     private Map<String, javax.inject.Provider<WorkerAssistedFactory<? extends ListenableWorker>>> mapOfStringAndProviderOfWorkerAssistedFactoryOf(
         ) {
-      return MapBuilder.<String, javax.inject.Provider<WorkerAssistedFactory<? extends ListenableWorker>>>newMapBuilder(2).put("com.beoffline.app.scheduler.StartRuleWorker", ((Provider) startRuleWorker_AssistedFactoryProvider)).put("com.beoffline.app.scheduler.StopRuleWorker", ((Provider) stopRuleWorker_AssistedFactoryProvider)).build();
+      return MapBuilder.<String, javax.inject.Provider<WorkerAssistedFactory<? extends ListenableWorker>>>newMapBuilder(3).put("com.beoffline.app.scheduler.StartRuleWorker", ((Provider) startRuleWorker_AssistedFactoryProvider)).put("com.beoffline.app.scheduler.StopRuleWorker", ((Provider) stopRuleWorker_AssistedFactoryProvider)).put("com.beoffline.app.vpn.VpnHealthWorker", ((Provider) vpnHealthWorker_AssistedFactoryProvider)).build();
     }
 
     private HiltWorkerFactory hiltWorkerFactory() {
@@ -659,6 +668,8 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
       this.vpnControllerProvider = DoubleCheck.provider(new SwitchingProvider<VpnController>(singletonCImpl, 4));
       this.startRuleWorker_AssistedFactoryProvider = SingleCheck.provider(new SwitchingProvider<StartRuleWorker_AssistedFactory>(singletonCImpl, 0));
       this.stopRuleWorker_AssistedFactoryProvider = SingleCheck.provider(new SwitchingProvider<StopRuleWorker_AssistedFactory>(singletonCImpl, 6));
+      this.vpnHealthWorker_AssistedFactoryProvider = SingleCheck.provider(new SwitchingProvider<VpnHealthWorker_AssistedFactory>(singletonCImpl, 7));
+      this.backgroundProtectionManagerProvider = DoubleCheck.provider(new SwitchingProvider<BackgroundProtectionManager>(singletonCImpl, 8));
     }
 
     @Override
@@ -674,6 +685,11 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
     @Override
     public void injectScheduleAlarmReceiver(ScheduleAlarmReceiver scheduleAlarmReceiver) {
       injectScheduleAlarmReceiver2(scheduleAlarmReceiver);
+    }
+
+    @Override
+    public void injectVpnRecoveryReceiver(VpnRecoveryReceiver vpnRecoveryReceiver) {
+      injectVpnRecoveryReceiver2(vpnRecoveryReceiver);
     }
 
     @Override
@@ -706,6 +722,12 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
       ScheduleAlarmReceiver_MembersInjector.injectRepository(instance3, blockRuleRepositoryProvider.get());
       ScheduleAlarmReceiver_MembersInjector.injectVpnController(instance3, vpnControllerProvider.get());
       return instance3;
+    }
+
+    private VpnRecoveryReceiver injectVpnRecoveryReceiver2(VpnRecoveryReceiver instance4) {
+      VpnRecoveryReceiver_MembersInjector.injectRepository(instance4, blockRuleRepositoryProvider.get());
+      VpnRecoveryReceiver_MembersInjector.injectVpnController(instance4, vpnControllerProvider.get());
+      return instance4;
     }
 
     private static final class SwitchingProvider<T> implements Provider<T> {
@@ -752,6 +774,17 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
               return new StopRuleWorker(context2, params2, singletonCImpl.blockRuleRepositoryProvider.get(), singletonCImpl.vpnControllerProvider.get());
             }
           };
+
+          case 7: // com.beoffline.app.vpn.VpnHealthWorker_AssistedFactory 
+          return (T) new VpnHealthWorker_AssistedFactory() {
+            @Override
+            public VpnHealthWorker create(Context context3, WorkerParameters params3) {
+              return new VpnHealthWorker(context3, params3, singletonCImpl.blockRuleRepositoryProvider.get(), singletonCImpl.vpnControllerProvider.get(), singletonCImpl.vpnStateManagerProvider.get());
+            }
+          };
+
+          case 8: // com.beoffline.app.background.BackgroundProtectionManager 
+          return (T) new BackgroundProtectionManager(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
 
           default: throw new AssertionError(id);
         }

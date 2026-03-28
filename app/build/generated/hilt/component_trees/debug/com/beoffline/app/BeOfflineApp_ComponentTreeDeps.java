@@ -23,6 +23,7 @@ import hilt_aggregated_deps._com_beoffline_app_MainActivity_GeneratedInjector;
 import hilt_aggregated_deps._com_beoffline_app_di_AppModule;
 import hilt_aggregated_deps._com_beoffline_app_receiver_BootReceiver_GeneratedInjector;
 import hilt_aggregated_deps._com_beoffline_app_receiver_ScheduleAlarmReceiver_GeneratedInjector;
+import hilt_aggregated_deps._com_beoffline_app_receiver_VpnRecoveryReceiver_GeneratedInjector;
 import hilt_aggregated_deps._com_beoffline_app_scheduler_StartRuleWorker_HiltModule;
 import hilt_aggregated_deps._com_beoffline_app_scheduler_StopRuleWorker_HiltModule;
 import hilt_aggregated_deps._com_beoffline_app_ui_screens_AppPickerViewModel_HiltModules_BindsModule;
@@ -32,6 +33,7 @@ import hilt_aggregated_deps._com_beoffline_app_ui_screens_DashboardViewModel_Hil
 import hilt_aggregated_deps._com_beoffline_app_ui_screens_RuleCreatorViewModel_HiltModules_BindsModule;
 import hilt_aggregated_deps._com_beoffline_app_ui_screens_RuleCreatorViewModel_HiltModules_KeyModule;
 import hilt_aggregated_deps._com_beoffline_app_vpn_BeOfflineVpnService_GeneratedInjector;
+import hilt_aggregated_deps._com_beoffline_app_vpn_VpnHealthWorker_HiltModule;
 import hilt_aggregated_deps._dagger_hilt_android_flags_FragmentGetContextFix_FragmentGetContextFixEntryPoint;
 import hilt_aggregated_deps._dagger_hilt_android_flags_HiltWrapper_FragmentGetContextFix_FragmentGetContextFixModule;
 import hilt_aggregated_deps._dagger_hilt_android_internal_lifecycle_DefaultViewModelFactories_ActivityEntryPoint;
@@ -78,6 +80,7 @@ import hilt_aggregated_deps._dagger_hilt_android_internal_modules_HiltWrapper_Ac
         _com_beoffline_app_di_AppModule.class,
         _com_beoffline_app_receiver_BootReceiver_GeneratedInjector.class,
         _com_beoffline_app_receiver_ScheduleAlarmReceiver_GeneratedInjector.class,
+        _com_beoffline_app_receiver_VpnRecoveryReceiver_GeneratedInjector.class,
         _com_beoffline_app_scheduler_StartRuleWorker_HiltModule.class,
         _com_beoffline_app_scheduler_StopRuleWorker_HiltModule.class,
         _com_beoffline_app_ui_screens_AppPickerViewModel_HiltModules_BindsModule.class,
@@ -87,6 +90,7 @@ import hilt_aggregated_deps._dagger_hilt_android_internal_modules_HiltWrapper_Ac
         _com_beoffline_app_ui_screens_RuleCreatorViewModel_HiltModules_BindsModule.class,
         _com_beoffline_app_ui_screens_RuleCreatorViewModel_HiltModules_KeyModule.class,
         _com_beoffline_app_vpn_BeOfflineVpnService_GeneratedInjector.class,
+        _com_beoffline_app_vpn_VpnHealthWorker_HiltModule.class,
         _dagger_hilt_android_flags_FragmentGetContextFix_FragmentGetContextFixEntryPoint.class,
         _dagger_hilt_android_flags_HiltWrapper_FragmentGetContextFix_FragmentGetContextFixModule.class,
         _dagger_hilt_android_internal_lifecycle_DefaultViewModelFactories_ActivityEntryPoint.class,

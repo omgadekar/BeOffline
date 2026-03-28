@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.vpn.VpnController
+import com.beoffline.app.vpn.VpnResilienceScheduler
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,9 +52,11 @@ class BootReceiver : BroadcastReceiver() {
                 val activePackages = repository.getActiveBlockedPackages()
                 if (activePackages.isNotEmpty()) {
                     Log.d(TAG, "Restoring VPN for ${activePackages.size} packages.")
+                    VpnResilienceScheduler.ensureHealthMonitor(context)
                     vpnController.startVpn(activePackages)
                 } else {
                     Log.d(TAG, "No active rules. VPN not restarted.")
+                    VpnResilienceScheduler.cancelHealthMonitor(context)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error restoring VPN on boot: ${e.message}")

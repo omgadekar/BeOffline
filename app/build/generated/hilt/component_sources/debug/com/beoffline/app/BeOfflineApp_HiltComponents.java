@@ -4,12 +4,14 @@ import androidx.hilt.work.HiltWrapper_WorkerFactoryModule;
 import com.beoffline.app.di.AppModule;
 import com.beoffline.app.receiver.BootReceiver_GeneratedInjector;
 import com.beoffline.app.receiver.ScheduleAlarmReceiver_GeneratedInjector;
+import com.beoffline.app.receiver.VpnRecoveryReceiver_GeneratedInjector;
 import com.beoffline.app.scheduler.StartRuleWorker_HiltModule;
 import com.beoffline.app.scheduler.StopRuleWorker_HiltModule;
 import com.beoffline.app.ui.screens.AppPickerViewModel_HiltModules;
 import com.beoffline.app.ui.screens.DashboardViewModel_HiltModules;
 import com.beoffline.app.ui.screens.RuleCreatorViewModel_HiltModules;
 import com.beoffline.app.vpn.BeOfflineVpnService_GeneratedInjector;
+import com.beoffline.app.vpn.VpnHealthWorker_HiltModule;
 import dagger.Binds;
 import dagger.Component;
 import dagger.Module;
@@ -141,13 +143,15 @@ public final class BeOfflineApp_HiltComponents {
           HiltWrapper_FragmentGetContextFix_FragmentGetContextFixModule.class,
           HiltWrapper_WorkerFactoryModule.class,
           StartRuleWorker_HiltModule.class,
-          StopRuleWorker_HiltModule.class
+          StopRuleWorker_HiltModule.class,
+          VpnHealthWorker_HiltModule.class
       }
   )
   @Singleton
   public abstract static class SingletonC implements BeOfflineApp_GeneratedInjector,
       BootReceiver_GeneratedInjector,
       ScheduleAlarmReceiver_GeneratedInjector,
+      VpnRecoveryReceiver_GeneratedInjector,
       FragmentGetContextFix.FragmentGetContextFixEntryPoint,
       HiltWrapper_ActivityRetainedComponentManager_ActivityRetainedComponentBuilderEntryPoint,
       ServiceComponentManager.ServiceComponentBuilderEntryPoint,

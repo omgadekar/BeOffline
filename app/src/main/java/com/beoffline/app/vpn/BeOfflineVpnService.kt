@@ -57,6 +57,7 @@ class BeOfflineVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var vpnJob: Job? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var stopRequested = false
 
     // The list of package names whose internet access will be blocked.
     private var blockedPackages: List<String> = emptyList()
@@ -68,6 +69,7 @@ class BeOfflineVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return when (intent?.action) {
             ACTION_START -> {
+                stopRequested = false
                 blockedPackages = intent.getStringArrayListExtra(EXTRA_BLOCKED_PACKAGES)
                     ?: emptyList<String>() as ArrayList<String>
 
@@ -77,6 +79,7 @@ class BeOfflineVpnService : VpnService() {
                 START_STICKY // OS will restart service if killed
             }
             ACTION_STOP -> {
+                stopRequested = true
                 Log.d(TAG, "Stop command received.")
                 stopVpn()
                 stopSelf()
@@ -94,9 +97,19 @@ class BeOfflineVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        if (shouldScheduleRecovery()) {
+            VpnResilienceScheduler.scheduleRecovery(this)
+        }
         super.onDestroy()
         stopVpn()
         serviceScope.cancel()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (shouldScheduleRecovery()) {
+            VpnResilienceScheduler.scheduleRecovery(this)
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     // =========================================================================
@@ -231,6 +244,10 @@ class BeOfflineVpnService : VpnService() {
         }
         vpnInterface = null
         vpnStateManager.setRunning(false)
+    }
+
+    private fun shouldScheduleRecovery(): Boolean {
+        return !stopRequested && blockedPackages.isNotEmpty()
     }
 
     // =========================================================================

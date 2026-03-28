@@ -7,6 +7,7 @@ import android.util.Log
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.scheduler.StartRuleWorker
 import com.beoffline.app.vpn.VpnController
+import com.beoffline.app.vpn.VpnResilienceScheduler
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,9 +55,11 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
 
                         val remainingRules = repository.getActiveRulesOnce()
                         if (remainingRules.isEmpty()) {
+                            VpnResilienceScheduler.cancelHealthMonitor(context)
                             vpnController.stopVpn()
                         } else {
                             val remainingPackages = remainingRules.flatMap { it.blockedPackages }.distinct()
+                            VpnResilienceScheduler.ensureHealthMonitor(context)
                             vpnController.startVpn(remainingPackages)
                         }
                     }

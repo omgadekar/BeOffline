@@ -15,6 +15,7 @@
 
     <!-- Scheduling: receive broadcast when device boots to restart active rules -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- WorkManager & exact alarms for schedule enforcement -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
@@ -95,6 +96,10 @@
              ================================================================ -->
         <receiver
             android:name=".receiver.ScheduleAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".receiver.VpnRecoveryReceiver"
             android:exported="false" />
 
         <!-- WorkManager provider (auto-initialized) -->

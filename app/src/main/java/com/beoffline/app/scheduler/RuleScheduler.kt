@@ -17,6 +17,7 @@ import com.beoffline.app.data.model.RuleType
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.receiver.ScheduleAlarmReceiver
 import com.beoffline.app.vpn.VpnController
+import com.beoffline.app.vpn.VpnResilienceScheduler
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.Calendar
@@ -233,8 +234,10 @@ class StopRuleWorker @AssistedInject constructor(
 
         val activeRules = repository.getActiveRulesOnce()
         if (activeRules.isEmpty()) {
+            VpnResilienceScheduler.cancelHealthMonitor(applicationContext)
             vpnController.stopVpn()
         } else {
+            VpnResilienceScheduler.ensureHealthMonitor(applicationContext)
             vpnController.startVpn(activeRules.flatMap { it.blockedPackages }.distinct())
         }
 
