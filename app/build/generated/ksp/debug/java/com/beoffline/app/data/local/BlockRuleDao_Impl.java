@@ -348,7 +348,7 @@ public final class BlockRuleDao_Impl implements BlockRuleDao {
   }
 
   @Override
-  public Object setTimerStartedAt(final int id, final long startedAt,
+  public Object setTimerStartedAt(final int id, final Long startedAt,
       final Continuation<? super Unit> $completion) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
@@ -356,7 +356,11 @@ public final class BlockRuleDao_Impl implements BlockRuleDao {
       public Unit call() throws Exception {
         final SupportSQLiteStatement _stmt = __preparedStmtOfSetTimerStartedAt.acquire();
         int _argIndex = 1;
-        _stmt.bindLong(_argIndex, startedAt);
+        if (startedAt == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindLong(_argIndex, startedAt);
+        }
         _argIndex = 2;
         _stmt.bindLong(_argIndex, id);
         try {

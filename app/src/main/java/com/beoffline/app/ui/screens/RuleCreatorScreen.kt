@@ -6,31 +6,86 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.beoffline.app.data.model.AppInfo
 import com.beoffline.app.data.model.RuleType
-import com.beoffline.app.ui.theme.*
+import com.beoffline.app.ui.theme.AccentPrimary
+import com.beoffline.app.ui.theme.AccentSecondary
+import com.beoffline.app.ui.theme.Brand600
+import com.beoffline.app.ui.theme.Brand700
+import com.beoffline.app.ui.theme.Brand800
+import com.beoffline.app.ui.theme.Brand900
+import com.beoffline.app.ui.theme.StatusDanger
+import com.beoffline.app.ui.theme.TextDisabled
+import com.beoffline.app.ui.theme.TextPrimary
+import com.beoffline.app.ui.theme.TextSecondary
 
-/** Converts any Drawable (including AdaptiveIconDrawable) to an ImageBitmap for Compose */
 private fun Drawable.toImageBitmap(): ImageBitmap {
     if (this is BitmapDrawable && bitmap != null) return bitmap.asImageBitmap()
-    val width  = intrinsicWidth.takeIf  { it > 0 } ?: 48
+    val width = intrinsicWidth.takeIf { it > 0 } ?: 48
     val height = intrinsicHeight.takeIf { it > 0 } ?: 48
     val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
@@ -41,7 +96,7 @@ private fun Drawable.toImageBitmap(): ImageBitmap {
 
 @Composable
 private fun SmallAppIcon(drawable: Drawable?, appName: String, modifier: Modifier = Modifier) {
-    val imageBitmap = remember(drawable) { drawable?.toImageBitmap() }
+    val imageBitmap = androidx.compose.runtime.remember(drawable) { drawable?.toImageBitmap() }
     if (imageBitmap != null) {
         Image(
             bitmap = imageBitmap,
@@ -73,7 +128,9 @@ fun RuleCreatorScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(ruleId) { if (ruleId != null) viewModel.loadRule(ruleId) }
+    LaunchedEffect(ruleId) {
+        if (ruleId != null) viewModel.loadRule(ruleId)
+    }
 
     Scaffold(
         containerColor = Brand900,
@@ -85,7 +142,10 @@ fun RuleCreatorScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(Brand900, titleContentColor = TextPrimary)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Brand900,
+                    titleContentColor = TextPrimary
+                )
             )
         },
         bottomBar = {
@@ -111,7 +171,6 @@ fun RuleCreatorScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Rule Name
             SectionCard(title = "Rule Name") {
                 OutlinedTextField(
                     value = uiState.name,
@@ -131,7 +190,6 @@ fun RuleCreatorScreen(
                 )
             }
 
-            // Apps to Block — with selected app list + deselect (Feature 4)
             SectionCard(title = "Apps to Block") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
@@ -140,8 +198,11 @@ fun RuleCreatorScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (uiState.selectedPackages.isEmpty()) "No apps selected"
-                                   else "${uiState.selectedPackages.size} app${if (uiState.selectedPackages.size != 1) "s" else ""} selected",
+                            text = if (uiState.selectedPackages.isEmpty()) {
+                                "No apps selected"
+                            } else {
+                                "${uiState.selectedPackages.size} app${if (uiState.selectedPackages.size != 1) "s" else ""} selected"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (uiState.selectedPackages.isEmpty()) TextDisabled else TextPrimary
                         )
@@ -150,7 +211,6 @@ fun RuleCreatorScreen(
                         }
                     }
 
-                    // Vertical list of selected apps with deselect button
                     if (uiState.selectedPackages.isNotEmpty()) {
                         HorizontalDivider(color = Brand600)
                         uiState.selectedAppInfos.forEach { appInfo ->
@@ -159,19 +219,19 @@ fun RuleCreatorScreen(
                                 onDeselect = { viewModel.deselectPackage(appInfo.packageName) }
                             )
                         }
-                        // Show any remaining packages that don't have AppInfo resolved yet
                         val resolvedPackages = uiState.selectedAppInfos.map { it.packageName }.toSet()
-                        uiState.selectedPackages.filter { it !in resolvedPackages }.forEach { pkg ->
-                            SelectedAppRow(
-                                appInfo = AppInfo(packageName = pkg, appName = pkg.substringAfterLast(".")),
-                                onDeselect = { viewModel.deselectPackage(pkg) }
-                            )
-                        }
+                        uiState.selectedPackages
+                            .filter { it !in resolvedPackages }
+                            .forEach { pkg ->
+                                SelectedAppRow(
+                                    appInfo = AppInfo(packageName = pkg, appName = pkg.substringAfterLast(".")),
+                                    onDeselect = { viewModel.deselectPackage(pkg) }
+                                )
+                            }
                     }
                 }
             }
 
-            // Rule Type
             SectionCard(title = "Block Type") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     RuleType.values().forEach { type ->
@@ -184,7 +244,6 @@ fun RuleCreatorScreen(
                 }
             }
 
-            // Scheduled time pickers (shown only for SCHEDULED) — Feature 3: proper dialog-based TimePicker
             if (uiState.ruleType == RuleType.SCHEDULED) {
                 SectionCard(title = "Schedule") {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -210,39 +269,33 @@ fun RuleCreatorScreen(
                 }
             }
 
-            // Timer duration (shown only for TIMER) — Feature 2: custom hours/minutes option
             if (uiState.ruleType == RuleType.TIMER) {
                 SectionCard(title = "Focus Duration") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(15, 30, 45, 60, 90, 120).forEach { mins ->
-                            val selected = uiState.timerMinutes == mins && !uiState.isCustomTimer
-                            OutlinedButton(
-                                onClick = { viewModel.onTimerMinutesChange(mins) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = if (selected) AccentPrimary.copy(alpha = 0.2f) else Brand700
-                                ),
-                                border = if (selected) ButtonDefaults.outlinedButtonBorder.copy(width = 1.5.dp) else ButtonDefaults.outlinedButtonBorder
-                            ) {
-                                val hours = mins / 60
-                                val remaining = mins % 60
-                                Text(
-                                    if (hours > 0) "${hours}h${if (remaining > 0) " ${remaining}m" else ""}"
-                                    else "${mins}m",
-                                    color = if (selected) AccentSecondary else TextSecondary
-                                )
-                            }
+                        uiState.currentCustomTimerMinutes?.let { customMinutes ->
+                            DurationOptionButton(
+                                label = "Current • ${formatTimerDurationShort(customMinutes)}",
+                                selected = uiState.isCustomTimer,
+                                onClick = viewModel::onSelectCustomTimer
+                            )
                         }
 
-                        // Custom duration option
+                        listOf(15, 30, 45, 60).forEach { mins ->
+                            DurationOptionButton(
+                                label = formatTimerDurationShort(mins),
+                                selected = uiState.timerMinutes == mins && !uiState.isCustomTimer,
+                                onClick = { viewModel.onTimerMinutesChange(mins) }
+                            )
+                        }
+
                         CustomTimerOption(
                             isSelected = uiState.isCustomTimer,
-                            customHours = uiState.customTimerHours,
-                            customMinutes = uiState.customTimerMinutes,
-                            onSelect = { viewModel.onSelectCustomTimer() },
-                            onHoursChange = { viewModel.onCustomTimerHoursChange(it) },
-                            onMinutesChange = { viewModel.onCustomTimerMinutesChange(it) }
+                            customHoursInput = uiState.customTimerHoursInput,
+                            customMinutesInput = uiState.customTimerMinutesInput,
+                            errorMessage = uiState.customTimerError,
+                            onSelect = viewModel::onSelectCustomTimer,
+                            onHoursChange = viewModel::onCustomTimerHoursChange,
+                            onMinutesChange = viewModel::onCustomTimerMinutesChange
                         )
                     }
                 }
@@ -250,8 +303,6 @@ fun RuleCreatorScreen(
         }
     }
 }
-
-// ── Sub-components ──────────────────────────────────────────────────────────
 
 @Composable
 private fun SelectedAppRow(appInfo: AppInfo, onDeselect: () -> Unit) {
@@ -272,10 +323,7 @@ private fun SelectedAppRow(appInfo: AppInfo, onDeselect: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text(appInfo.appName, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
         }
-        IconButton(
-            onClick = onDeselect,
-            modifier = Modifier.size(32.dp)
-        ) {
+        IconButton(onClick = onDeselect, modifier = Modifier.size(32.dp)) {
             Icon(
                 Icons.Default.Close,
                 contentDescription = "Remove ${appInfo.appName}",
@@ -287,13 +335,40 @@ private fun SelectedAppRow(appInfo: AppInfo, onDeselect: () -> Unit) {
 }
 
 @Composable
+private fun DurationOptionButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (selected) AccentPrimary.copy(alpha = 0.2f) else Brand700
+        ),
+        border = if (selected) {
+            ButtonDefaults.outlinedButtonBorder.copy(width = 1.5.dp)
+        } else {
+            ButtonDefaults.outlinedButtonBorder
+        }
+    ) {
+        Text(
+            text = label,
+            color = if (selected) AccentSecondary else TextSecondary
+        )
+    }
+}
+
+@Composable
 private fun CustomTimerOption(
     isSelected: Boolean,
-    customHours: Int,
-    customMinutes: Int,
+    customHoursInput: String,
+    customMinutesInput: String,
+    errorMessage: String?,
     onSelect: () -> Unit,
-    onHoursChange: (Int) -> Unit,
-    onMinutesChange: (Int) -> Unit
+    onHoursChange: (String) -> Unit,
+    onMinutesChange: (String) -> Unit
 ) {
     OutlinedButton(
         onClick = onSelect,
@@ -302,41 +377,51 @@ private fun CustomTimerOption(
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = if (isSelected) AccentPrimary.copy(alpha = 0.2f) else Brand700
         ),
-        border = if (isSelected) ButtonDefaults.outlinedButtonBorder.copy(width = 1.5.dp) else ButtonDefaults.outlinedButtonBorder
+        border = if (isSelected) {
+            ButtonDefaults.outlinedButtonBorder.copy(width = 1.5.dp)
+        } else {
+            ButtonDefaults.outlinedButtonBorder
+        }
     ) {
-        Text(
-            "Custom",
-            color = if (isSelected) AccentSecondary else TextSecondary
-        )
+        Text("Custom", color = if (isSelected) AccentSecondary else TextSecondary)
     }
 
     if (isSelected) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
-            colors = CardDefaults.cardColors(containerColor = Brand700)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                colors = CardDefaults.cardColors(containerColor = Brand700)
             ) {
-                // Hours picker
-                NumberPickerColumn(
-                    label = "Hours",
-                    value = customHours,
-                    range = 0..23,
-                    onValueChange = onHoursChange
-                )
-                Text(":", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
-                // Minutes picker
-                NumberPickerColumn(
-                    label = "Minutes",
-                    value = customMinutes,
-                    range = 0..59,
-                    onValueChange = onMinutesChange
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    NumberPickerColumn(
+                        modifier = Modifier.weight(1f),
+                        label = "Hours",
+                        value = customHoursInput,
+                        rangeLabel = "0-24",
+                        onValueChange = onHoursChange
+                    )
+                    NumberPickerColumn(
+                        modifier = Modifier.weight(1f),
+                        label = "Minutes",
+                        value = customMinutesInput,
+                        rangeLabel = "0-59",
+                        onValueChange = onMinutesChange
+                    )
+                }
+            }
+
+            errorMessage?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = StatusDanger
                 )
             }
         }
@@ -345,34 +430,48 @@ private fun CustomTimerOption(
 
 @Composable
 private fun NumberPickerColumn(
+    modifier: Modifier = Modifier,
     label: String,
-    value: Int,
-    range: IntRange,
-    onValueChange: (Int) -> Unit
+    value: String,
+    rangeLabel: String,
+    onValueChange: (String) -> Unit
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
         Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
-                onClick = { if (value > range.first) onValueChange(value - 1) },
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease", tint = TextSecondary)
-            }
-            Text(
-                text = "%02d".format(value),
-                style = MaterialTheme.typography.headlineMedium,
+        Text(rangeLabel, style = MaterialTheme.typography.labelSmall, color = TextDisabled)
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = { onValueChange(it.filter(Char::isDigit).take(4)) },
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = MaterialTheme.typography.titleLarge.copy(
                 color = TextPrimary,
-                modifier = Modifier.widthIn(min = 48.dp),
+                textAlign = TextAlign.Center
+            ),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            placeholder = {
+                Text(
+                    text = "00",
+                    color = TextDisabled,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            },
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = AccentPrimary,
+                unfocusedBorderColor = Brand600,
+                focusedContainerColor = Brand800,
+                unfocusedContainerColor = Brand800,
+                focusedTextColor = TextPrimary,
+                unfocusedTextColor = TextPrimary
             )
-            IconButton(
-                onClick = { if (value < range.last) onValueChange(value + 1) },
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase", tint = TextSecondary)
-            }
-        }
+        )
     }
 }
 
@@ -400,7 +499,7 @@ private fun TimePickerDialogField(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
             Text(
-                if (hour != null) "%02d:%02d".format(hour, minute ?: 0) else "--:--",
+                text = if (hour != null) "%02d:%02d".format(hour, minute ?: 0) else "--:--",
                 style = MaterialTheme.typography.titleMedium,
                 color = if (hour != null) TextPrimary else TextDisabled
             )
@@ -438,7 +537,7 @@ private fun TimePickerDialogField(
                             periodSelectorSelectedContainerColor = AccentPrimary.copy(alpha = 0.3f),
                             periodSelectorUnselectedContainerColor = Brand700,
                             periodSelectorSelectedContentColor = TextPrimary,
-                            periodSelectorUnselectedContentColor = TextSecondary,
+                            periodSelectorUnselectedContentColor = TextSecondary
                         )
                     )
                     Row(
@@ -479,11 +578,12 @@ private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Un
 
 @Composable
 private fun RuleTypeOption(type: RuleType, isSelected: Boolean, onSelect: () -> Unit) {
-    val (icon, desc) = when (type) {
+    val (icon, description) = when (type) {
         RuleType.PERMANENT -> Icons.Default.Block to "Block until I turn it off"
         RuleType.SCHEDULED -> Icons.Default.Schedule to "Block on a recurring schedule"
-        RuleType.TIMER     -> Icons.Default.Timer to "Block for a set duration"
+        RuleType.TIMER -> Icons.Default.Timer to "Block for a set duration"
     }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
@@ -494,11 +594,20 @@ private fun RuleTypeOption(type: RuleType, isSelected: Boolean, onSelect: () -> 
             colors = RadioButtonDefaults.colors(selectedColor = AccentPrimary)
         )
         Spacer(Modifier.width(8.dp))
-        Icon(icon, contentDescription = null, tint = if (isSelected) AccentPrimary else TextSecondary, modifier = Modifier.size(20.dp))
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (isSelected) AccentPrimary else TextSecondary,
+            modifier = Modifier.size(20.dp)
+        )
         Spacer(Modifier.width(8.dp))
         Column {
-            Text(type.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
-            Text(desc, style = MaterialTheme.typography.bodyMedium, color = TextDisabled)
+            Text(
+                text = type.name.lowercase().replaceFirstChar { it.uppercase() },
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextPrimary
+            )
+            Text(description, style = MaterialTheme.typography.bodyMedium, color = TextDisabled)
         }
     }
 }
@@ -507,8 +616,8 @@ private fun RuleTypeOption(type: RuleType, isSelected: Boolean, onSelect: () -> 
 private fun DaySelector(activeDays: List<Int>, onToggleDay: (Int) -> Unit) {
     val dayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        dayLabels.forEachIndexed { idx, label ->
-            val day = idx + 1
+        dayLabels.forEachIndexed { index, label ->
+            val day = index + 1
             val selected = day in activeDays
             Button(
                 onClick = { onToggleDay(day) },
@@ -517,11 +626,21 @@ private fun DaySelector(activeDays: List<Int>, onToggleDay: (Int) -> Unit) {
                 contentPadding = PaddingValues(0.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (selected) AccentPrimary else Brand700,
-                    contentColor = if (selected) com.beoffline.app.ui.theme.TextPrimary else TextSecondary
+                    contentColor = if (selected) TextPrimary else TextSecondary
                 )
             ) {
                 Text(label, style = MaterialTheme.typography.labelLarge)
             }
         }
+    }
+}
+
+private fun formatTimerDurationShort(minutes: Int): String {
+    val hours = minutes / 60
+    val remainingMinutes = minutes % 60
+    return when {
+        hours > 0 && remainingMinutes > 0 -> "${hours}h ${remainingMinutes}m"
+        hours > 0 -> "${hours}h"
+        else -> "${minutes}m"
     }
 }

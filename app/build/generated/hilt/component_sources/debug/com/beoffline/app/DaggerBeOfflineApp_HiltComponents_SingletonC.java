@@ -19,6 +19,8 @@ import com.beoffline.app.di.AppModule_ProvideBlockRuleDaoFactory;
 import com.beoffline.app.di.AppModule_ProvideDatabaseFactory;
 import com.beoffline.app.receiver.BootReceiver;
 import com.beoffline.app.receiver.BootReceiver_MembersInjector;
+import com.beoffline.app.receiver.ScheduleAlarmReceiver;
+import com.beoffline.app.receiver.ScheduleAlarmReceiver_MembersInjector;
 import com.beoffline.app.scheduler.StartRuleWorker;
 import com.beoffline.app.scheduler.StartRuleWorker_AssistedFactory;
 import com.beoffline.app.scheduler.StopRuleWorker;
@@ -421,17 +423,17 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
-      static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
-
       static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
+
+      static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
 
       static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
 
       @KeepFieldType
-      RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
+      DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
 
       @KeepFieldType
-      DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
+      RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
 
       @KeepFieldType
       AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
@@ -485,18 +487,18 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
     private static final class LazyClassKeyProvider {
       static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
 
-      static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
-
       static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
+
+      static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
 
       @KeepFieldType
       AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
 
       @KeepFieldType
-      RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
+      DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
 
       @KeepFieldType
-      DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
+      RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
     }
 
     private static final class SwitchingProvider<T> implements Provider<T> {
@@ -524,7 +526,7 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
           return (T) new AppPickerViewModel(singletonCImpl.blockRuleRepositoryProvider.get());
 
           case 1: // com.beoffline.app.ui.screens.DashboardViewModel 
-          return (T) new DashboardViewModel(singletonCImpl.blockRuleRepositoryProvider.get(), singletonCImpl.vpnControllerProvider.get(), singletonCImpl.vpnStateManagerProvider.get());
+          return (T) new DashboardViewModel(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule), singletonCImpl.blockRuleRepositoryProvider.get(), singletonCImpl.vpnControllerProvider.get(), singletonCImpl.vpnStateManagerProvider.get());
 
           case 2: // com.beoffline.app.ui.screens.RuleCreatorViewModel 
           return (T) new RuleCreatorViewModel(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule), singletonCImpl.blockRuleRepositoryProvider.get(), viewModelCImpl.savedStateHandle);
@@ -670,6 +672,11 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
     }
 
     @Override
+    public void injectScheduleAlarmReceiver(ScheduleAlarmReceiver scheduleAlarmReceiver) {
+      injectScheduleAlarmReceiver2(scheduleAlarmReceiver);
+    }
+
+    @Override
     public Set<Boolean> getDisableFragmentGetContextFix() {
       return Collections.<Boolean>emptySet();
     }
@@ -693,6 +700,12 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
       BootReceiver_MembersInjector.injectRepository(instance2, blockRuleRepositoryProvider.get());
       BootReceiver_MembersInjector.injectVpnController(instance2, vpnControllerProvider.get());
       return instance2;
+    }
+
+    private ScheduleAlarmReceiver injectScheduleAlarmReceiver2(ScheduleAlarmReceiver instance3) {
+      ScheduleAlarmReceiver_MembersInjector.injectRepository(instance3, blockRuleRepositoryProvider.get());
+      ScheduleAlarmReceiver_MembersInjector.injectVpnController(instance3, vpnControllerProvider.get());
+      return instance3;
     }
 
     private static final class SwitchingProvider<T> implements Provider<T> {

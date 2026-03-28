@@ -4,55 +4,101 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.rounded.PhoneDisabled
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.beoffline.app.data.model.AppInfo
 import com.beoffline.app.data.model.BlockRule
 import com.beoffline.app.data.model.RuleType
-import com.beoffline.app.ui.theme.*
+import com.beoffline.app.ui.theme.AccentPrimary
+import com.beoffline.app.ui.theme.AccentSecondary
+import com.beoffline.app.ui.theme.Brand600
+import com.beoffline.app.ui.theme.Brand700
+import com.beoffline.app.ui.theme.Brand800
+import com.beoffline.app.ui.theme.Brand900
+import com.beoffline.app.ui.theme.StatusActive
+import com.beoffline.app.ui.theme.StatusDanger
+import com.beoffline.app.ui.theme.StatusInactive
+import com.beoffline.app.ui.theme.TextDisabled
+import com.beoffline.app.ui.theme.TextPrimary
+import com.beoffline.app.ui.theme.TextSecondary
 
-/** Converts any Drawable to Compose ImageBitmap (shared utility within Dashboard) */
 private fun Drawable.toImageBitmapDash(): ImageBitmap {
     if (this is BitmapDrawable && bitmap != null) return bitmap.asImageBitmap()
-    val w = intrinsicWidth.takeIf { it > 0 } ?: 48
-    val h = intrinsicHeight.takeIf { it > 0 } ?: 48
-    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-    val cvs = Canvas(bmp)
-    setBounds(0, 0, cvs.width, cvs.height)
-    draw(cvs)
+    val width = intrinsicWidth.takeIf { it > 0 } ?: 48
+    val height = intrinsicHeight.takeIf { it > 0 } ?: 48
+    val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    setBounds(0, 0, canvas.width, canvas.height)
+    draw(canvas)
     return bmp.asImageBitmap()
 }
 
 @Composable
 private fun TinyAppIcon(drawable: Drawable?, appName: String, modifier: Modifier = Modifier) {
-    val bmp = remember(drawable) { drawable?.toImageBitmapDash() }
-    if (bmp != null) {
-        androidx.compose.foundation.Image(
-            bitmap = bmp,
+    val bitmap = remember(drawable) { drawable?.toImageBitmapDash() }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap,
             contentDescription = appName,
             contentScale = ContentScale.Fit,
             modifier = modifier
@@ -100,17 +146,14 @@ fun DashboardScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header
             item {
                 DashboardHeader(uiState.isVpnRunning, uiState.activeRules.size, onStopAll = viewModel::stopAll)
             }
 
-            // Status card
             item {
                 StatusCard(isVpnRunning = uiState.isVpnRunning, activeCount = uiState.activeRules.size)
             }
 
-            // Section title
             item {
                 Text(
                     text = "Your Rules",
@@ -124,7 +167,6 @@ fun DashboardScreen(
                 item { EmptyRulesPrompt() }
             }
 
-            // Rule cards
             items(uiState.rules, key = { it.id }) { rule ->
                 RuleCard(
                     rule = rule,
@@ -141,12 +183,10 @@ fun DashboardScreen(
                 )
             }
 
-            item { Spacer(modifier = Modifier.height(72.dp)) } // FAB clearance
+            item { Spacer(modifier = Modifier.height(72.dp)) }
         }
     }
 }
-
-// ── Components ──────────────────────────────────────────────────────────────
 
 @Composable
 private fun DashboardHeader(isRunning: Boolean, activeCount: Int, onStopAll: () -> Unit) {
@@ -160,7 +200,11 @@ private fun DashboardHeader(isRunning: Boolean, activeCount: Int, onStopAll: () 
         Column {
             Text("BeOffline", style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
             Text(
-                if (isRunning) "$activeCount rule${if (activeCount != 1) "s" else ""} active" else "All apps online",
+                text = if (isRunning) {
+                    "$activeCount rule${if (activeCount != 1) "s" else ""} active"
+                } else {
+                    "All apps online"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (isRunning) StatusActive else TextSecondary
             )
@@ -183,13 +227,18 @@ private fun StatusCard(isVpnRunning: Boolean, activeCount: Int) {
 
     val dotColor by animateColorAsState(
         targetValue = if (isVpnRunning) StatusActive else StatusInactive,
-        animationSpec = tween(600), label = "dot"
+        animationSpec = tween(600),
+        label = "status_dot"
     )
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f, targetValue = 0.7f,
-        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        initialValue = 0.2f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
         label = "pulse_alpha"
     )
 
@@ -198,11 +247,14 @@ private fun StatusCard(isVpnRunning: Boolean, activeCount: Int) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .background(gradientBrush)
-            .border(1.dp, if (isVpnRunning) AccentPrimary.copy(alpha = 0.4f) else Brand600, RoundedCornerShape(20.dp))
+            .border(
+                width = 1.dp,
+                color = if (isVpnRunning) AccentPrimary.copy(alpha = 0.4f) else Brand600,
+                shape = RoundedCornerShape(20.dp)
+            )
             .padding(20.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            // Animated pulse dot
             Box {
                 if (isVpnRunning) {
                     Box(
@@ -228,7 +280,11 @@ private fun StatusCard(isVpnRunning: Boolean, activeCount: Int) {
                     color = TextPrimary
                 )
                 Text(
-                    text = if (isVpnRunning) "$activeCount app${if (activeCount != 1) " groups" else " group"} silenced" else "Tap a rule or '+' to start",
+                    text = if (isVpnRunning) {
+                        "$activeCount app${if (activeCount != 1) " groups" else " group"} silenced"
+                    } else {
+                        "Tap a rule or '+' to start"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary
                 )
@@ -262,7 +318,7 @@ private fun RuleCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(rule.name, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
                     Text(
-                        text = "${rule.blockedPackages.size} app${if (rule.blockedPackages.size != 1) "s" else ""} • ${rule.ruleType.label()}",
+                        text = buildRuleSummary(rule),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary
                     )
@@ -277,14 +333,13 @@ private fun RuleCard(
                 )
             }
 
-            Divider(color = Brand600, modifier = Modifier.padding(vertical = 10.dp))
+            HorizontalDivider(color = Brand600, modifier = Modifier.padding(vertical = 10.dp))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // App icons on the left of the action buttons row
                 if (appInfos.isNotEmpty()) {
                     AppIconStrip(appInfos = appInfos, totalCount = rule.blockedPackages.size)
                 } else {
@@ -313,14 +368,16 @@ private fun RuleCard(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete '${rule.name}'?") },
-            text  = { Text("This will permanently remove the rule.", color = TextSecondary) },
+            text = { Text("This will permanently remove the rule.", color = TextSecondary) },
             confirmButton = {
                 TextButton(onClick = { onDelete(); showDeleteDialog = false }) {
                     Text("Delete", color = StatusDanger)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
             },
             containerColor = Brand800
         )
@@ -329,8 +386,7 @@ private fun RuleCard(
 
 @Composable
 private fun AppIconStrip(appInfos: List<AppInfo>, totalCount: Int) {
-    val maxIcons = 3
-    val visible = appInfos.take(maxIcons)
+    val visible = appInfos.take(3)
     val overflow = totalCount - visible.size
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -380,16 +436,41 @@ private fun EmptyRulesPrompt() {
         )
         Text("No rules yet", style = MaterialTheme.typography.titleMedium, color = TextSecondary)
         Text(
-            "Tap '+' to silence your first app",
+            text = "Tap '+' to silence your first app",
             style = MaterialTheme.typography.bodyMedium,
             color = TextDisabled
         )
     }
 }
 
-// Helper
+private fun buildRuleSummary(rule: BlockRule): String {
+    val appsLabel = "${rule.blockedPackages.size} app${if (rule.blockedPackages.size != 1) "s" else ""}"
+
+    if (rule.ruleType != RuleType.TIMER) {
+        return "$appsLabel • ${rule.ruleType.label()}"
+    }
+
+    return buildString {
+        append("$appsLabel • ${rule.ruleType.label()}")
+        rule.timerDurationMinutes?.let { append(" • ${formatTimerDurationLong(it)} total") }
+    }
+}
+
+private fun formatTimerDurationLong(minutes: Int): String {
+    val hours = minutes / 60
+    val remainingMinutes = minutes % 60
+    return when {
+        hours > 0 && remainingMinutes > 0 ->
+            "$hours ${if (hours == 1) "hour" else "hours"} $remainingMinutes ${if (remainingMinutes == 1) "min" else "mins"}"
+        hours > 0 ->
+            "$hours ${if (hours == 1) "hour" else "hours"}"
+        else ->
+            "$minutes ${if (minutes == 1) "min" else "mins"}"
+    }
+}
+
 private fun RuleType.label() = when (this) {
-    RuleType.PERMANENT  -> "Always on"
-    RuleType.SCHEDULED  -> "Scheduled"
-    RuleType.TIMER      -> "Timer"
+    RuleType.PERMANENT -> "Always on"
+    RuleType.SCHEDULED -> "Scheduled"
+    RuleType.TIMER -> "Timer"
 }

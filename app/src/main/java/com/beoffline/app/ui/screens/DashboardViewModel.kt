@@ -1,14 +1,23 @@
 package com.beoffline.app.ui.screens
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.beoffline.app.data.model.AppInfo
 import com.beoffline.app.data.model.BlockRule
+import com.beoffline.app.data.model.RuleType
 import com.beoffline.app.data.repository.BlockRuleRepository
+import com.beoffline.app.scheduler.RuleScheduler
 import com.beoffline.app.vpn.VpnController
 import com.beoffline.app.vpn.VpnStateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -16,13 +25,13 @@ data class DashboardUiState(
     val isVpnRunning: Boolean = false,
     val rules: List<BlockRule> = emptyList(),
     val activeRules: List<BlockRule> = emptyList(),
-    /** Maps rule ID → resolved AppInfo list (for icon display in cards) */
     val appInfosByRule: Map<Int, List<AppInfo>> = emptyMap(),
     val isLoading: Boolean = false
 )
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val repository: BlockRuleRepository,
     private val vpnController: VpnController,
     private val vpnStateManager: VpnStateManager
@@ -41,27 +50,30 @@ class DashboardViewModel @Inject constructor(
             combine(
                 repository.getAllRules(),
                 repository.getActiveRules()
-            ) { all, active ->
-                _uiState.update { it.copy(rules = all, activeRules = active, isLoading = false) }
-                // Resolve app icons for all rules in background
-                resolveAppIcons(all)
-            }.collect()
+            ) { allRules, activeRules ->
+                _uiState.update {
+                    it.copy(
+                        rules = allRules,
+                        activeRules = activeRules,
+                        isLoading = false
+                    )
+                }
+                resolveAppIcons(allRules)
+            }.collect { }
         }
     }
 
     private suspend fun resolveAppIcons(rules: List<BlockRule>) {
         try {
-            // Collect all unique packages across all rules
             val allPackages = rules.flatMap { it.blockedPackages }.distinct()
-            // Fast targeted lookup — only fetches icons for packages in rules,
-            // not ALL installed apps. Cache means repeat calls are instant.
             val infos = repository.getAppInfoForPackages(allPackages)
             val lookup = infos.associateBy { it.packageName }
             val infoMap = rules.associate { rule ->
                 rule.id to rule.blockedPackages.mapNotNull { pkg -> lookup[pkg] }
             }
             _uiState.update { it.copy(appInfosByRule = infoMap) }
-        } catch (_: Exception) { /* non-critical; icons just won't show */ }
+        } catch (_: Exception) {
+        }
     }
 
     private fun observeVpnState() {
@@ -74,41 +86,64 @@ class DashboardViewModel @Inject constructor(
 
     fun activateRule(rule: BlockRule, onNeedVpnPermission: (List<String>) -> Unit) {
         viewModelScope.launch {
+            val timerStartedAt = if (rule.ruleType == RuleType.TIMER) System.currentTimeMillis() else null
+
             repository.setRuleActive(rule.id, true)
-            // Collect all currently active packages
-            val activePackages = mutableListOf<String>()
-            repository.getActiveRules()
-                .first()
-                .forEach { activePackages.addAll(it.blockedPackages) }
-            // Check if VPN is already running — if so, restart with updated package list
-            onNeedVpnPermission(activePackages.distinct())
+            if (rule.ruleType == RuleType.TIMER) {
+                repository.setTimerStartedAt(rule.id, timerStartedAt)
+                RuleScheduler.scheduleTimerStop(
+                    context,
+                    rule.copy(isActive = true, timerStartedAt = timerStartedAt)
+                )
+            }
+
+            val activePackages = repository
+                .getActiveRulesOnce()
+                .flatMap { it.blockedPackages }
+                .distinct()
+
+            onNeedVpnPermission(activePackages)
         }
     }
 
     fun deactivateRule(rule: BlockRule) {
         viewModelScope.launch {
-            repository.setRuleActive(rule.id, false)
-            // Check if there are still other active rules
-            val remaining = repository.getActiveRules().first()
-            if (remaining.isEmpty()) {
-                vpnController.stopVpn()
-            } else {
-                vpnController.startVpn(remaining.flatMap { it.blockedPackages }.distinct())
-            }
+            deactivateRuleInternal(rule)
         }
     }
 
     fun deleteRule(rule: BlockRule) {
         viewModelScope.launch {
-            if (rule.isActive) deactivateRule(rule)
+            if (rule.isActive) deactivateRuleInternal(rule)
             repository.deleteRule(rule)
         }
     }
 
     fun stopAll() {
         viewModelScope.launch {
+            repository.getActiveRulesOnce().forEach { activeRule ->
+                if (activeRule.ruleType == RuleType.TIMER) {
+                    repository.setTimerStartedAt(activeRule.id, null)
+                    RuleScheduler.cancelTimerStop(context, activeRule.id)
+                }
+            }
             repository.deactivateAllRules()
             vpnController.stopVpn()
+        }
+    }
+
+    private suspend fun deactivateRuleInternal(rule: BlockRule) {
+        repository.setRuleActive(rule.id, false)
+        if (rule.ruleType == RuleType.TIMER) {
+            repository.setTimerStartedAt(rule.id, null)
+            RuleScheduler.cancelTimerStop(context, rule.id)
+        }
+
+        val remaining = repository.getActiveRulesOnce()
+        if (remaining.isEmpty()) {
+            vpnController.stopVpn()
+        } else {
+            vpnController.startVpn(remaining.flatMap { it.blockedPackages }.distinct())
         }
     }
 }

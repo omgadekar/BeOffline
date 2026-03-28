@@ -3,6 +3,7 @@ package com.beoffline.app;
 import androidx.hilt.work.HiltWrapper_WorkerFactoryModule;
 import com.beoffline.app.di.AppModule;
 import com.beoffline.app.receiver.BootReceiver_GeneratedInjector;
+import com.beoffline.app.receiver.ScheduleAlarmReceiver_GeneratedInjector;
 import com.beoffline.app.scheduler.StartRuleWorker_HiltModule;
 import com.beoffline.app.scheduler.StopRuleWorker_HiltModule;
 import com.beoffline.app.ui.screens.AppPickerViewModel_HiltModules;
@@ -146,6 +147,7 @@ public final class BeOfflineApp_HiltComponents {
   @Singleton
   public abstract static class SingletonC implements BeOfflineApp_GeneratedInjector,
       BootReceiver_GeneratedInjector,
+      ScheduleAlarmReceiver_GeneratedInjector,
       FragmentGetContextFix.FragmentGetContextFixEntryPoint,
       HiltWrapper_ActivityRetainedComponentManager_ActivityRetainedComponentBuilderEntryPoint,
       ServiceComponentManager.ServiceComponentBuilderEntryPoint,

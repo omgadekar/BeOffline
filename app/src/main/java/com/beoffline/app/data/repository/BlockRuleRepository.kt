@@ -29,7 +29,9 @@ class BlockRuleRepository @Inject constructor(
     suspend fun updateRule(rule: BlockRule) = dao.updateRule(rule)
     suspend fun deleteRule(rule: BlockRule) = dao.deleteRule(rule)
     suspend fun setRuleActive(id: Int, active: Boolean) = dao.setRuleActive(id, active)
+    suspend fun setTimerStartedAt(id: Int, startedAt: Long?) = dao.setTimerStartedAt(id, startedAt)
     suspend fun deactivateAllRules() = dao.deactivateAllRules()
+    suspend fun getActiveRulesOnce(): List<BlockRule> = dao.getActiveRules().first()
 
     // ── Installed Apps (with in-memory cache) ──────────────────────────────────
 
