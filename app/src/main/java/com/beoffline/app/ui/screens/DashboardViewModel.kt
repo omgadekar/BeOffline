@@ -10,6 +10,7 @@ import com.beoffline.app.data.model.BlockRule
 import com.beoffline.app.data.model.RuleType
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.scheduler.RuleScheduler
+import com.beoffline.app.support.IssueReporter
 import com.beoffline.app.vpn.VpnController
 import com.beoffline.app.vpn.VpnStateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -38,6 +39,7 @@ class DashboardViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val backgroundProtectionManager: BackgroundProtectionManager,
     private val repository: BlockRuleRepository,
+    private val issueReporter: IssueReporter,
     private val vpnController: VpnController,
     private val vpnStateManager: VpnStateManager
 ) : ViewModel() {
@@ -164,6 +166,17 @@ class DashboardViewModel @Inject constructor(
     fun dismissWelcomeDialog() {
         preferences.edit().putBoolean(KEY_WELCOME_DIALOG_SEEN, true).apply()
         _uiState.update { it.copy(showWelcomeDialog = false) }
+    }
+
+    fun submitIssueReport(title: String, details: String) {
+        val snapshot = _uiState.value
+        issueReporter.submitIssue(
+            title = title,
+            details = details,
+            isVpnRunning = snapshot.isVpnRunning,
+            activeRulesCount = snapshot.activeRules.size,
+            totalRulesCount = snapshot.rules.size
+        )
     }
 
     private suspend fun deactivateRuleInternal(rule: BlockRule) {

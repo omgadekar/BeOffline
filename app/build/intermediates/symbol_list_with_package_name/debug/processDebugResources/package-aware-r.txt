@@ -193,6 +193,7 @@ id view_tree_saved_state_registry_owner
 id view_tree_view_model_store_owner
 id visible_removing_fragment_view_tag
 id wrapped_composition_tag
+integer google_play_services_version
 integer status_bar_notification_info_maxnum
 layout custom_dialog
 layout ime_base_split_test_activity
@@ -204,6 +205,8 @@ layout notification_template_icon_group
 layout notification_template_part_chronometer
 layout notification_template_part_time
 mipmap ic_launcher
+raw firebase_common_keep
+raw firebase_crashlytics_keep
 string androidx_startup
 string app_name
 string call_notification_answer_action
@@ -215,9 +218,17 @@ string call_notification_ongoing_text
 string call_notification_screening_text
 string close_drawer
 string close_sheet
+string com_google_firebase_crashlytics_mapping_file_id
+string com_google_firebase_crashlytics_version_control_info
+string common_google_play_services_unknown_issue
 string default_error_message
 string default_popup_window_title
 string dropdown_menu
+string gcm_defaultSenderId
+string google_api_key
+string google_app_id
+string google_crash_reporting_api_key
+string google_storage_bucket
 string in_progress
 string indeterminate
 string m3c_bottom_sheet_collapse_description
@@ -282,6 +293,7 @@ string notification_channel_desc
 string notification_channel_name
 string off
 string on
+string project_id
 string range_end
 string range_start
 string selected

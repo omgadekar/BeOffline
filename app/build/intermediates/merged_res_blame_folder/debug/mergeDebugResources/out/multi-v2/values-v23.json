@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.beoffline.app-mergeDebugResources-65:/values-v23/values-v23.xml",
+            "outputFile": "com.beoffline.app-mergeDebugResources-72:/values-v23/values-v23.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\f36554c9c8ea41c8e50b046ccd99cd02\\transformed\\work-runtime-2.9.0\\res\\values-v23\\values-v23.xml",
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\17d448727d29443c3f7b78b3383dc1d3\\transformed\\work-runtime-2.9.0\\res\\values-v23\\values-v23.xml",
                     "from": {
                         "startLines": "2,3",
                         "startColumns": "4,4",

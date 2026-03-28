@@ -28,6 +28,7 @@ import com.beoffline.app.scheduler.StartRuleWorker;
 import com.beoffline.app.scheduler.StartRuleWorker_AssistedFactory;
 import com.beoffline.app.scheduler.StopRuleWorker;
 import com.beoffline.app.scheduler.StopRuleWorker_AssistedFactory;
+import com.beoffline.app.support.IssueReporter;
 import com.beoffline.app.ui.screens.AppPickerViewModel;
 import com.beoffline.app.ui.screens.AppPickerViewModel_HiltModules;
 import com.beoffline.app.ui.screens.DashboardViewModel;
@@ -40,6 +41,7 @@ import com.beoffline.app.vpn.VpnController;
 import com.beoffline.app.vpn.VpnHealthWorker;
 import com.beoffline.app.vpn.VpnHealthWorker_AssistedFactory;
 import com.beoffline.app.vpn.VpnStateManager;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import dagger.hilt.android.ActivityRetainedLifecycle;
 import dagger.hilt.android.ViewModelLifecycle;
 import dagger.hilt.android.internal.builders.ActivityComponentBuilder;
@@ -421,6 +423,7 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
       return new ViewCBuilder(singletonCImpl, activityRetainedCImpl, activityCImpl);
     }
 
+    @CanIgnoreReturnValue
     private MainActivity injectMainActivity2(MainActivity instance) {
       MainActivity_MembersInjector.injectVpnController(instance, singletonCImpl.vpnControllerProvider.get());
       return instance;
@@ -428,20 +431,20 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
+      static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
+
       static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
 
       static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
 
-      static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
+      @KeepFieldType
+      DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
 
       @KeepFieldType
       RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
 
       @KeepFieldType
       AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
-
-      @KeepFieldType
-      DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
     }
   }
 
@@ -490,20 +493,20 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
+      static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
+
       static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
 
       static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
 
-      static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
+      @KeepFieldType
+      RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
 
       @KeepFieldType
       AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
 
       @KeepFieldType
       DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
-
-      @KeepFieldType
-      RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
     }
 
     private static final class SwitchingProvider<T> implements Provider<T> {
@@ -531,7 +534,7 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
           return (T) new AppPickerViewModel(singletonCImpl.blockRuleRepositoryProvider.get());
 
           case 1: // com.beoffline.app.ui.screens.DashboardViewModel 
-          return (T) new DashboardViewModel(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule), singletonCImpl.backgroundProtectionManagerProvider.get(), singletonCImpl.blockRuleRepositoryProvider.get(), singletonCImpl.vpnControllerProvider.get(), singletonCImpl.vpnStateManagerProvider.get());
+          return (T) new DashboardViewModel(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule), singletonCImpl.backgroundProtectionManagerProvider.get(), singletonCImpl.blockRuleRepositoryProvider.get(), singletonCImpl.issueReporterProvider.get(), singletonCImpl.vpnControllerProvider.get(), singletonCImpl.vpnStateManagerProvider.get());
 
           case 2: // com.beoffline.app.ui.screens.RuleCreatorViewModel 
           return (T) new RuleCreatorViewModel(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule), singletonCImpl.blockRuleRepositoryProvider.get(), viewModelCImpl.savedStateHandle);
@@ -615,6 +618,7 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
       injectBeOfflineVpnService2(beOfflineVpnService);
     }
 
+    @CanIgnoreReturnValue
     private BeOfflineVpnService injectBeOfflineVpnService2(BeOfflineVpnService instance) {
       BeOfflineVpnService_MembersInjector.injectVpnStateManager(instance, singletonCImpl.vpnStateManagerProvider.get());
       return instance;
@@ -644,6 +648,8 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
 
     private Provider<BackgroundProtectionManager> backgroundProtectionManagerProvider;
 
+    private Provider<IssueReporter> issueReporterProvider;
+
     private SingletonCImpl(ApplicationContextModule applicationContextModuleParam) {
       this.applicationContextModule = applicationContextModuleParam;
       initialize(applicationContextModuleParam);
@@ -670,6 +676,7 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
       this.stopRuleWorker_AssistedFactoryProvider = SingleCheck.provider(new SwitchingProvider<StopRuleWorker_AssistedFactory>(singletonCImpl, 6));
       this.vpnHealthWorker_AssistedFactoryProvider = SingleCheck.provider(new SwitchingProvider<VpnHealthWorker_AssistedFactory>(singletonCImpl, 7));
       this.backgroundProtectionManagerProvider = DoubleCheck.provider(new SwitchingProvider<BackgroundProtectionManager>(singletonCImpl, 8));
+      this.issueReporterProvider = DoubleCheck.provider(new SwitchingProvider<IssueReporter>(singletonCImpl, 9));
     }
 
     @Override
@@ -707,23 +714,27 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
       return new ServiceCBuilder(singletonCImpl);
     }
 
+    @CanIgnoreReturnValue
     private BeOfflineApp injectBeOfflineApp2(BeOfflineApp instance) {
       BeOfflineApp_MembersInjector.injectWorkerFactory(instance, hiltWorkerFactory());
       return instance;
     }
 
+    @CanIgnoreReturnValue
     private BootReceiver injectBootReceiver2(BootReceiver instance2) {
       BootReceiver_MembersInjector.injectRepository(instance2, blockRuleRepositoryProvider.get());
       BootReceiver_MembersInjector.injectVpnController(instance2, vpnControllerProvider.get());
       return instance2;
     }
 
+    @CanIgnoreReturnValue
     private ScheduleAlarmReceiver injectScheduleAlarmReceiver2(ScheduleAlarmReceiver instance3) {
       ScheduleAlarmReceiver_MembersInjector.injectRepository(instance3, blockRuleRepositoryProvider.get());
       ScheduleAlarmReceiver_MembersInjector.injectVpnController(instance3, vpnControllerProvider.get());
       return instance3;
     }
 
+    @CanIgnoreReturnValue
     private VpnRecoveryReceiver injectVpnRecoveryReceiver2(VpnRecoveryReceiver instance4) {
       VpnRecoveryReceiver_MembersInjector.injectRepository(instance4, blockRuleRepositoryProvider.get());
       VpnRecoveryReceiver_MembersInjector.injectVpnController(instance4, vpnControllerProvider.get());
@@ -785,6 +796,9 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
 
           case 8: // com.beoffline.app.background.BackgroundProtectionManager 
           return (T) new BackgroundProtectionManager(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
+
+          case 9: // com.beoffline.app.support.IssueReporter 
+          return (T) new IssueReporter();
 
           default: throw new AssertionError(id);
         }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.PhoneDisabled
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -48,7 +50,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -137,6 +142,9 @@ fun DashboardScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
+    var showSupportSheet by remember { mutableStateOf(false) }
+    var showIssueDialog by remember { mutableStateOf(false) }
+    var showIssueSubmittedDialog by remember { mutableStateOf(false) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -169,7 +177,11 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                DashboardHeader(uiState.isVpnRunning, uiState.activeRules.size, onStopAll = viewModel::stopAll)
+                DashboardHeader(
+                    isRunning = uiState.isVpnRunning,
+                    activeCount = uiState.activeRules.size,
+                    onStopAll = viewModel::stopAll
+                )
             }
 
             item {
@@ -177,12 +189,24 @@ fun DashboardScreen(
             }
 
             item {
-                Text(
-                    text = "Your Rules",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Your Rules",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextSecondary
+                    )
+                    HelpButton(onClick = { showSupportSheet = true })
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(2.dp))
             }
 
             if (uiState.rules.isEmpty()) {
@@ -222,10 +246,39 @@ fun DashboardScreen(
             WelcomeDialog(onContinue = viewModel::dismissWelcomeDialog)
         }
     }
+
+    if (showSupportSheet) {
+        SupportSheet(
+            onDismiss = { showSupportSheet = false },
+            onReportIssue = {
+                showSupportSheet = false
+                showIssueDialog = true
+            }
+        )
+    }
+
+    if (showIssueDialog) {
+        ReportIssueDialog(
+            onDismiss = { showIssueDialog = false },
+            onSubmit = { title, details ->
+                viewModel.submitIssueReport(title, details)
+                showIssueDialog = false
+                showIssueSubmittedDialog = true
+            }
+        )
+    }
+
+    if (showIssueSubmittedDialog) {
+        IssueSubmittedDialog(onDismiss = { showIssueSubmittedDialog = false })
+    }
 }
 
 @Composable
-private fun DashboardHeader(isRunning: Boolean, activeCount: Int, onStopAll: () -> Unit) {
+private fun DashboardHeader(
+    isRunning: Boolean,
+    activeCount: Int,
+    onStopAll: () -> Unit
+) {
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -246,9 +299,31 @@ private fun DashboardHeader(isRunning: Boolean, activeCount: Int, onStopAll: () 
             )
         }
         if (isRunning) {
-            TextButton(onClick = onStopAll, colors = ButtonDefaults.textButtonColors(contentColor = StatusDanger)) {
+            TextButton(
+                onClick = onStopAll,
+                colors = ButtonDefaults.textButtonColors(contentColor = StatusDanger)
+            ) {
                 Text("Stop All")
             }
+        }
+    }
+}
+
+@Composable
+private fun HelpButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(Brand800)
+            .border(1.dp, Brand600, CircleShape)
+    ) {
+        IconButton(onClick = onClick, modifier = Modifier.fillMaxSize()) {
+            Text(
+                text = "?",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary
+            )
         }
     }
 }
@@ -476,6 +551,193 @@ private fun EmptyRulesPrompt() {
             style = MaterialTheme.typography.bodyMedium,
             color = TextDisabled
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SupportSheet(
+    onDismiss: () -> Unit,
+    onReportIssue: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Brand800
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = "Help & feedback",
+                style = MaterialTheme.typography.titleLarge,
+                color = TextPrimary
+            )
+            Text(
+                text = "Tell us when something broke or didn’t feel right. Your report will include device and app context to help debug it faster.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary
+            )
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onReportIssue),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Brand700),
+                border = BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.25f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "Report an issue",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Send a bug report straight from the app.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun ReportIssueDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String, String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var details by remember { mutableStateOf("") }
+    val canSubmit = title.isNotBlank() && details.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Report an issue",
+                style = MaterialTheme.typography.titleLarge,
+                color = TextPrimary
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Tell us what happened. The report will include app version, device info, and current rule state in Crashlytics.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Short title") }
+                )
+                OutlinedTextField(
+                    value = details,
+                    onValueChange = { details = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 6,
+                    label = { Text("What went wrong?") }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(title.trim(), details.trim()) },
+                enabled = canSubmit,
+                colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+            ) {
+                Text("Send report")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        containerColor = Brand800
+    )
+}
+
+@Composable
+private fun IssueSubmittedDialog(onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF17273A), Brand800, Color(0xFF101522))
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = StatusActive.copy(alpha = 0.28f),
+                    shape = RoundedCornerShape(28.dp)
+                )
+                .padding(24.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(StatusActive.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CheckCircle,
+                        contentDescription = null,
+                        tint = StatusActive,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Issue sent",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Thanks for reporting it. We'll review the issue and use the details from your report to investigate it faster.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                ) {
+                    Text("Done", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                }
+            }
+        }
     }
 }
 

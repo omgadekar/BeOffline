@@ -1,46 +1,42 @@
 [
     {
-        "merged": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-debug-67:\\mipmap-xxhdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-main-69:\\mipmap-xxhdpi\\ic_launcher.png"
+        "merged": "com.beoffline.app-debug-74:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "com.beoffline.app-main-76:/mipmap-xxhdpi/ic_launcher.png"
     },
     {
-        "merged": "com.beoffline.app-debug-67:/drawable_ic_launcher_foreground.xml.flat",
-        "source": "com.beoffline.app-main-69:/drawable/ic_launcher_foreground.xml"
+        "merged": "com.beoffline.app-debug-74:/drawable-nodpi_ic_launcher_preview_circle.png.flat",
+        "source": "com.beoffline.app-main-76:/drawable-nodpi/ic_launcher_preview_circle.png"
     },
     {
-        "merged": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-debug-67:\\mipmap-hdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-main-69:\\mipmap-hdpi\\ic_launcher.png"
+        "merged": "com.beoffline.app-debug-74:/drawable_ic_launcher_background.xml.flat",
+        "source": "com.beoffline.app-main-76:/drawable/ic_launcher_background.xml"
     },
     {
-        "merged": "com.beoffline.app-debug-67:/drawable-nodpi_ic_launcher_preview_circle.png.flat",
-        "source": "com.beoffline.app-main-69:/drawable-nodpi/ic_launcher_preview_circle.png"
+        "merged": "com.beoffline.app-debug-74:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "com.beoffline.app-main-76:/mipmap-xhdpi/ic_launcher.png"
     },
     {
-        "merged": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-debug-67:\\drawable-nodpi_ic_launcher_foreground_art.png.flat",
-        "source": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-main-69:\\drawable-nodpi\\ic_launcher_foreground_art.png"
+        "merged": "com.beoffline.app-debug-74:/drawable-nodpi_ic_launcher_foreground_art.png.flat",
+        "source": "com.beoffline.app-main-76:/drawable-nodpi/ic_launcher_foreground_art.png"
     },
     {
-        "merged": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-debug-67:\\mipmap-anydpi-v26_ic_launcher.xml.flat",
-        "source": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-main-69:\\mipmap-anydpi-v26\\ic_launcher.xml"
+        "merged": "com.beoffline.app-debug-74:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.beoffline.app-main-76:/drawable/ic_launcher_foreground.xml"
     },
     {
-        "merged": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-debug-67:\\mipmap-xxxhdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-main-69:\\mipmap-xxxhdpi\\ic_launcher.png"
+        "merged": "com.beoffline.app-debug-74:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.beoffline.app-main-76:/mipmap-anydpi-v26/ic_launcher.xml"
     },
     {
-        "merged": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-debug-67:\\mipmap-mdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-main-69:\\mipmap-mdpi\\ic_launcher.png"
+        "merged": "com.beoffline.app-debug-74:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "com.beoffline.app-main-76:/mipmap-mdpi/ic_launcher.png"
     },
     {
-        "merged": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-debug-67:\\drawable_ic_launcher_foreground.xml.flat",
-        "source": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-main-69:\\drawable\\ic_launcher_foreground.xml"
+        "merged": "com.beoffline.app-debug-74:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "com.beoffline.app-main-76:/mipmap-hdpi/ic_launcher.png"
     },
     {
-        "merged": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-debug-67:\\mipmap-xhdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-main-69:\\mipmap-xhdpi\\ic_launcher.png"
-    },
-    {
-        "merged": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-debug-67:\\drawable_ic_launcher_background.xml.flat",
-        "source": "C:\\Users\\gadek\\.gradle\\daemon\\8.7\\com.beoffline.app-main-69:\\drawable\\ic_launcher_background.xml"
+        "merged": "com.beoffline.app-debug-74:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "com.beoffline.app-main-76:/mipmap-xxxhdpi/ic_launcher.png"
     }
 ]
