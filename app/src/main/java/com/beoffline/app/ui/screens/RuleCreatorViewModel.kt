@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class RuleCreatorUiState(
+    val id: Int? = null,
     val name: String = "",
     val selectedPackages: List<String> = emptyList(),
     /** Resolved AppInfo objects for selected packages (for icon/name display) */
@@ -71,6 +72,7 @@ class RuleCreatorViewModel @Inject constructor(
             // Update all rule fields immediately (fast DB read, no icon wait)
             _uiState.update {
                 it.copy(
+                    id = rule.id,
                     name = rule.name,
                     selectedPackages = rule.blockedPackages,
                     ruleType = rule.ruleType,
@@ -156,6 +158,7 @@ class RuleCreatorViewModel @Inject constructor(
     fun saveRule() {
         val state = _uiState.value
         val rule = BlockRule(
+            id = state.id ?: 0,
             name = state.name.trim(),
             blockedPackages = state.selectedPackages,
             ruleType = state.ruleType,
