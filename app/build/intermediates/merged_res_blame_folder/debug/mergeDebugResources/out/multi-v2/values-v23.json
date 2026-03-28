@@ -4,7 +4,7 @@
             "outputFile": "com.beoffline.app-mergeDebugResources-72:/values-v23/values-v23.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\17d448727d29443c3f7b78b3383dc1d3\\transformed\\work-runtime-2.9.0\\res\\values-v23\\values-v23.xml",
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\406466ba904ce7dd5c0f8871746e165e\\transformed\\work-runtime-2.9.0\\res\\values-v23\\values-v23.xml",
                     "from": {
                         "startLines": "2,3",
                         "startColumns": "4,4",

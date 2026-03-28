@@ -4,7 +4,7 @@
             "outputFile": "com.beoffline.app.test.app-mergeDebugAndroidTestResources-32:/values-v28/values-v28.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\fe2dab844832161777ff512e4d3874ed\\transformed\\core-1.6.1\\res\\values-v28\\values.xml",
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\6f402bd0421d3d021310bf29e49307ad\\transformed\\core-1.6.1\\res\\values-v28\\values.xml",
                     "from": {
                         "startLines": "4,13",
                         "startColumns": "0,0",

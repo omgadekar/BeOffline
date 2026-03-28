@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ======================================================================
          PERMISSIONS
@@ -7,11 +8,6 @@
 
     <!-- Core VPN permission — Android will show the system VPN consent dialog -->
     <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
-
-    <!-- Required to enumerate installed packages for the app picker -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission"
-        xmlns:tools="http://schemas.android.com/tools" />
 
     <!-- Scheduling: receive broadcast when device boots to restart active rules -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -35,6 +31,14 @@
 
     <!-- Wake locks to prevent WorkManager tasks from being killed -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Narrow package visibility for the app picker: only launcher apps. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <application
         android:name=".BeOfflineApp"
@@ -102,14 +106,17 @@
             android:name=".receiver.VpnRecoveryReceiver"
             android:exported="false" />
 
-        <!-- WorkManager provider (auto-initialized) -->
+        <!-- Remove the default WorkManager initializer because BeOfflineApp provides
+             the configuration and worker factory explicitly. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
-            android:exported="false">
+            android:exported="false"
+            tools:node="merge">
             <meta-data
                 android:name="androidx.work.WorkManagerInitializer"
-                android:value="androidx.startup" />
+                android:value="androidx.startup"
+                tools:node="remove" />
         </provider>
 
     </application>

@@ -1,6 +1,6 @@
 [versions]
 gson = "2.10.1"
-agp = "8.5.2"
+agp = "8.6.1"
 kotlin = "1.9.24"
 coreKtx = "1.13.1"
 junit = "4.13.2"

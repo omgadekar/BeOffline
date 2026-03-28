@@ -18,9 +18,6 @@
     <!-- Core VPN permission — Android will show the system VPN consent dialog -->
     <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
 
-    <!-- Required to enumerate installed packages for the app picker -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-
     <!-- Scheduling: receive broadcast when device boots to restart active rules -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -44,6 +41,15 @@
     <!-- Wake locks to prevent WorkManager tasks from being killed -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Narrow package visibility for the app picker: only launcher apps. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <permission
         android:name="com.beoffline.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
         android:protectionLevel="signature" />
@@ -60,6 +66,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
+        android:testOnly="true"
         android:theme="@style/Theme.BeOffline" >
 
         <!--
@@ -128,14 +135,14 @@
             android:name="com.beoffline.app.receiver.VpnRecoveryReceiver"
             android:exported="false" />
 
-        <!-- WorkManager provider (auto-initialized) -->
+        <!--
+             Remove the default WorkManager initializer because BeOfflineApp provides
+             the configuration and worker factory explicitly.
+        -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="com.beoffline.app.androidx-startup"
             android:exported="false" >
-            <meta-data
-                android:name="androidx.work.WorkManagerInitializer"
-                android:value="androidx.startup" />
             <meta-data
                 android:name="androidx.emoji2.text.EmojiCompatInitializer"
                 android:value="androidx.startup" />

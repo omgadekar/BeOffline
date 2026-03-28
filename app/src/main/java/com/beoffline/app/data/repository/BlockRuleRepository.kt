@@ -1,6 +1,7 @@
 package com.beoffline.app.data.repository
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.util.LruCache
@@ -72,37 +73,47 @@ class BlockRuleRepository @Inject constructor(
         }
 
     /**
-     * Returns all installed, non-system, launchable apps on the device.
-     * Use this for the AppPicker (needs full list). For dashboard use
+     * Returns all visible, non-system launcher apps on the device.
+     * Use this for the AppPicker (needs the selectable app list). For dashboard use
      * getAppInfoForPackages() instead — it's much faster.
      *
-     * First call scans all apps (slow). Results are cached per-package in
-     * LruCache, so subsequent calls (and getAppInfoForPackages) are instant.
+     * This intentionally queries launcher activities instead of all installed
+     * applications so the app can work without QUERY_ALL_PACKAGES.
      */
     suspend fun getInstalledApps(): List<AppInfo> = withContext(Dispatchers.IO) {
         val pm = context.packageManager
-        val rawApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { appInfo ->
+        val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+
+        val launcherApps = pm.queryIntentActivitiesCompat(launcherIntent)
+            .asSequence()
+            .mapNotNull { resolveInfo ->
+                val appInfo = resolveInfo.activityInfo?.applicationInfo ?: return@mapNotNull null
+                val packageName = appInfo.packageName
                 val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
                 val isUpdatedSystemApp = (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-                (!isSystemApp || isUpdatedSystemApp) &&
-                pm.getLaunchIntentForPackage(appInfo.packageName) != null &&
-                appInfo.packageName != context.packageName
-            }
 
-        rawApps.map { appInfo ->
-            // Return cached entry if available (avoids icon decode cost)
-            iconCache.get(appInfo.packageName) ?: run {
-                val info = AppInfo(
-                    packageName = appInfo.packageName,
-                    appName = appInfo.loadLabel(pm).toString(),
-                    isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                    icon = try { appInfo.loadIcon(pm) } catch (e: Exception) { null }
-                )
-                iconCache.put(appInfo.packageName, info)
-                info
+                if (((isSystemApp && !isUpdatedSystemApp) || packageName == context.packageName)) {
+                    return@mapNotNull null
+                }
+
+                iconCache.get(packageName) ?: run {
+                    val info = AppInfo(
+                        packageName = packageName,
+                        appName = resolveInfo.loadLabel(pm).toString(),
+                        isSystemApp = isSystemApp,
+                        icon = try { resolveInfo.loadIcon(pm) } catch (e: Exception) { null }
+                    )
+                    iconCache.put(packageName, info)
+                    info
+                }
             }
-        }.sortedBy { it.appName.lowercase() }
+            .distinctBy { it.packageName }
+            .sortedBy { it.appName.lowercase() }
+            .toList()
+
+        launcherApps
     }
 
     /**
@@ -117,4 +128,12 @@ class BlockRuleRepository @Inject constructor(
         val rules = dao.getActiveRules().first()   // ← was .collect{} — caused ANR
         return rules.flatMap { it.blockedPackages }.distinct()
     }
+
+    @Suppress("DEPRECATION")
+    private fun PackageManager.queryIntentActivitiesCompat(intent: Intent) =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
+        } else {
+            queryIntentActivities(intent, 0)
+        }
 }
