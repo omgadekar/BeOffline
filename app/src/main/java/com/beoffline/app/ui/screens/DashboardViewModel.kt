@@ -2,6 +2,7 @@ package com.beoffline.app.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.beoffline.app.data.model.AppInfo
 import com.beoffline.app.data.model.BlockRule
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.vpn.VpnController
@@ -15,6 +16,8 @@ data class DashboardUiState(
     val isVpnRunning: Boolean = false,
     val rules: List<BlockRule> = emptyList(),
     val activeRules: List<BlockRule> = emptyList(),
+    /** Maps rule ID → resolved AppInfo list (for icon display in cards) */
+    val appInfosByRule: Map<Int, List<AppInfo>> = emptyMap(),
     val isLoading: Boolean = false
 )
 
@@ -40,8 +43,25 @@ class DashboardViewModel @Inject constructor(
                 repository.getActiveRules()
             ) { all, active ->
                 _uiState.update { it.copy(rules = all, activeRules = active, isLoading = false) }
+                // Resolve app icons for all rules in background
+                resolveAppIcons(all)
             }.collect()
         }
+    }
+
+    private suspend fun resolveAppIcons(rules: List<BlockRule>) {
+        try {
+            // Collect all unique packages across all rules
+            val allPackages = rules.flatMap { it.blockedPackages }.distinct()
+            // Fast targeted lookup — only fetches icons for packages in rules,
+            // not ALL installed apps. Cache means repeat calls are instant.
+            val infos = repository.getAppInfoForPackages(allPackages)
+            val lookup = infos.associateBy { it.packageName }
+            val infoMap = rules.associate { rule ->
+                rule.id to rule.blockedPackages.mapNotNull { pkg -> lookup[pkg] }
+            }
+            _uiState.update { it.copy(appInfosByRule = infoMap) }
+        } catch (_: Exception) { /* non-critical; icons just won't show */ }
     }
 
     private fun observeVpnState() {

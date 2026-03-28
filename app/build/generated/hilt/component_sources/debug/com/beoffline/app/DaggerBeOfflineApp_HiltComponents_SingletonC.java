@@ -421,20 +421,20 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
-      static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
-
       static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
 
       static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
 
-      @KeepFieldType
-      AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
+      static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
 
       @KeepFieldType
       RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
 
       @KeepFieldType
       DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
+
+      @KeepFieldType
+      AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
     }
   }
 
@@ -483,20 +483,20 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
+      static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
+
       static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
 
       static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
 
-      static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
+      @KeepFieldType
+      AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
 
       @KeepFieldType
       RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
 
       @KeepFieldType
       DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
-
-      @KeepFieldType
-      AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
     }
 
     private static final class SwitchingProvider<T> implements Provider<T> {

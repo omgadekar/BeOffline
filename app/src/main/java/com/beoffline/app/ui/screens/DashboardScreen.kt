@@ -1,5 +1,9 @@
 package com.beoffline.app.ui.screens
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -19,13 +23,53 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.beoffline.app.data.model.AppInfo
 import com.beoffline.app.data.model.BlockRule
 import com.beoffline.app.data.model.RuleType
 import com.beoffline.app.ui.theme.*
+
+/** Converts any Drawable to Compose ImageBitmap (shared utility within Dashboard) */
+private fun Drawable.toImageBitmapDash(): ImageBitmap {
+    if (this is BitmapDrawable && bitmap != null) return bitmap.asImageBitmap()
+    val w = intrinsicWidth.takeIf { it > 0 } ?: 48
+    val h = intrinsicHeight.takeIf { it > 0 } ?: 48
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val cvs = Canvas(bmp)
+    setBounds(0, 0, cvs.width, cvs.height)
+    draw(cvs)
+    return bmp.asImageBitmap()
+}
+
+@Composable
+private fun TinyAppIcon(drawable: Drawable?, appName: String, modifier: Modifier = Modifier) {
+    val bmp = remember(drawable) { drawable?.toImageBitmapDash() }
+    if (bmp != null) {
+        androidx.compose.foundation.Image(
+            bitmap = bmp,
+            contentDescription = appName,
+            contentScale = ContentScale.Fit,
+            modifier = modifier
+        )
+    } else {
+        Box(
+            modifier = modifier.background(Brand700, RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = appName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSecondary
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +128,7 @@ fun DashboardScreen(
             items(uiState.rules, key = { it.id }) { rule ->
                 RuleCard(
                     rule = rule,
+                    appInfos = uiState.appInfosByRule[rule.id] ?: emptyList(),
                     onToggle = { active ->
                         if (active) {
                             viewModel.activateRule(rule, onRequestVpn)
@@ -195,6 +240,7 @@ private fun StatusCard(isVpnRunning: Boolean, activeCount: Int) {
 @Composable
 private fun RuleCard(
     rule: BlockRule,
+    appInfos: List<AppInfo>,
     onToggle: (Boolean) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -233,19 +279,31 @@ private fun RuleCard(
 
             Divider(color = Brand600, modifier = Modifier.padding(vertical = 10.dp))
 
-            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onEdit, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Edit", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // App icons on the left of the action buttons row
+                if (appInfos.isNotEmpty()) {
+                    AppIconStrip(appInfos = appInfos, totalCount = rule.blockedPackages.size)
+                } else {
+                    Spacer(Modifier.weight(1f))
                 }
-                TextButton(
-                    onClick = { showDeleteDialog = true },
-                    contentPadding = PaddingValues(horizontal = 8.dp)
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Delete", style = MaterialTheme.typography.labelLarge, color = StatusDanger)
+                Row {
+                    TextButton(onClick = onEdit, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Edit", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+                    }
+                    TextButton(
+                        onClick = { showDeleteDialog = true },
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Delete", style = MaterialTheme.typography.labelLarge, color = StatusDanger)
+                    }
                 }
             }
         }
@@ -266,6 +324,42 @@ private fun RuleCard(
             },
             containerColor = Brand800
         )
+    }
+}
+
+@Composable
+private fun AppIconStrip(appInfos: List<AppInfo>, totalCount: Int) {
+    val maxIcons = 3
+    val visible = appInfos.take(maxIcons)
+    val overflow = totalCount - visible.size
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        visible.forEach { info ->
+            TinyAppIcon(
+                drawable = info.icon,
+                appName = info.appName,
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(6.dp))
+            )
+        }
+        if (overflow > 0) {
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(AccentPrimary.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "+$overflow",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AccentSecondary
+                )
+            }
+        }
     }
 }
 
