@@ -45,10 +45,22 @@ data class RuleCreatorUiState(
     val createdAt: Long = System.currentTimeMillis(),
     val isLoading: Boolean = false
 ) {
+    val scheduleError: String?
+        get() = when {
+            ruleType != RuleType.SCHEDULED -> null
+            startHour == null || startMinute == null -> "Choose a start time."
+            endHour == null || endMinute == null -> "Choose an end time."
+            activeDays.isEmpty() -> "Select at least one repeat day."
+            ((endHour * 60) + endMinute) <= ((startHour * 60) + startMinute) ->
+                "End time must be later than start time."
+            else -> null
+        }
+
     val isValid: Boolean
         get() = name.isNotBlank() &&
             selectedPackages.isNotEmpty() &&
-            (ruleType != RuleType.TIMER || !isCustomTimer || customTimerError == null)
+            (ruleType != RuleType.TIMER || !isCustomTimer || customTimerError == null) &&
+            (ruleType != RuleType.SCHEDULED || scheduleError == null)
 
     val currentCustomTimerMinutes: Int?
         get() = timerMinutes.takeIf { it !in PRESET_TIMER_MINUTES }
@@ -134,7 +146,15 @@ class RuleCreatorViewModel @Inject constructor(
 
     fun onNameChange(name: String) = _uiState.update { it.copy(name = name) }
     fun onRuleTypeChange(type: RuleType) = _uiState.update { it.copy(ruleType = type) }
-    fun onStartTimeSet(hour: Int, minute: Int) = _uiState.update { it.copy(startHour = hour, startMinute = minute) }
+    fun onStartTimeSet(hour: Int, minute: Int) = _uiState.update { state ->
+        val startChanged = state.startHour != hour || state.startMinute != minute
+        state.copy(
+            startHour = hour,
+            startMinute = minute,
+            endHour = if (startChanged) null else state.endHour,
+            endMinute = if (startChanged) null else state.endMinute
+        )
+    }
     fun onEndTimeSet(hour: Int, minute: Int) = _uiState.update { it.copy(endHour = hour, endMinute = minute) }
 
     fun onTimerMinutesChange(mins: Int) = _uiState.update {
@@ -169,8 +189,10 @@ class RuleCreatorViewModel @Inject constructor(
         _uiState.update { it.copy(activeDays = days.sorted()) }
     }
 
-    fun saveRule() {
+    fun saveRule(onSaved: () -> Unit) {
         val state = _uiState.value
+        if (!state.isValid) return
+
         val rule = BlockRule(
             id = state.id ?: 0,
             name = state.name.trim(),
@@ -187,10 +209,18 @@ class RuleCreatorViewModel @Inject constructor(
             createdAt = state.createdAt
         )
         viewModelScope.launch {
-            val id = repository.saveRule(rule)
-            if (state.ruleType == RuleType.SCHEDULED) {
-                RuleScheduler.scheduleRule(context, rule.copy(id = id.toInt()))
+            val savedRule = if (state.id != null) {
+                repository.updateRule(rule)
+                rule
+            } else {
+                val id = repository.saveRule(rule)
+                rule.copy(id = id.toInt())
             }
+            RuleScheduler.cancelRule(context, savedRule.id)
+            if (state.ruleType == RuleType.SCHEDULED) {
+                RuleScheduler.scheduleRule(context, savedRule)
+            }
+            onSaved()
         }
     }
 

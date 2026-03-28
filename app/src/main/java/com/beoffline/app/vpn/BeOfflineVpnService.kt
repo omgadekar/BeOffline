@@ -12,6 +12,10 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.beoffline.app.MainActivity
 import com.beoffline.app.R
+import com.beoffline.app.data.model.RuleType
+import com.beoffline.app.data.repository.BlockRuleRepository
+import com.beoffline.app.scheduler.RuleScheduler
+import com.beoffline.app.support.BlockedTrafficAlertManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import javax.inject.Inject
@@ -54,6 +58,12 @@ class BeOfflineVpnService : VpnService() {
     @Inject
     lateinit var vpnStateManager: VpnStateManager
 
+    @Inject
+    lateinit var repository: BlockRuleRepository
+
+    @Inject
+    lateinit var blockedTrafficAlertManager: BlockedTrafficAlertManager
+
     private var vpnInterface: ParcelFileDescriptor? = null
     private var vpnJob: Job? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -72,6 +82,7 @@ class BeOfflineVpnService : VpnService() {
                 stopRequested = false
                 blockedPackages = intent.getStringArrayListExtra(EXTRA_BLOCKED_PACKAGES)
                     ?: emptyList<String>() as ArrayList<String>
+                blockedTrafficAlertManager.markSessionStarted()
 
                 Log.d(TAG, "Starting VPN. Blocking ${blockedPackages.size} apps: $blockedPackages")
                 startForeground(NOTIFICATION_ID, buildNotification(blockedPackages.size))
@@ -80,9 +91,26 @@ class BeOfflineVpnService : VpnService() {
             }
             ACTION_STOP -> {
                 stopRequested = true
+                blockedTrafficAlertManager.markSessionStopped()
                 Log.d(TAG, "Stop command received.")
-                stopVpn()
-                stopSelf()
+                serviceScope.launch {
+                    runCatching {
+                        repository.getActiveRulesOnce().forEach { activeRule ->
+                            if (activeRule.ruleType == RuleType.TIMER) {
+                                repository.setTimerStartedAt(activeRule.id, null)
+                                RuleScheduler.cancelTimerStop(this@BeOfflineVpnService, activeRule.id)
+                            }
+                            repository.setRuleActive(activeRule.id, false)
+                        }
+                    }.onFailure { error ->
+                        Log.e(TAG, "Failed clearing active rules from notification stop.", error)
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        stopVpn()
+                        stopSelf()
+                    }
+                }
                 START_NOT_STICKY
             }
             else -> START_NOT_STICKY
@@ -207,6 +235,7 @@ class BeOfflineVpnService : VpnService() {
 
                     when {
                         bytesRead > 0 -> {
+                            blockedTrafficAlertManager.notifyBlockedTrafficAttempt(blockedPackages)
                             // Packet received — silently discard. The packet dies here. 🎯
                         }
                         bytesRead == 0 -> {
@@ -244,6 +273,7 @@ class BeOfflineVpnService : VpnService() {
         }
         vpnInterface = null
         vpnStateManager.setRunning(false)
+        blockedTrafficAlertManager.markSessionStopped()
     }
 
     private fun shouldScheduleRecovery(): Boolean {

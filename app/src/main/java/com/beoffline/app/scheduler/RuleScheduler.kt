@@ -25,29 +25,31 @@ import java.util.concurrent.TimeUnit
 
 object RuleScheduler {
 
+    private const val SCHEDULE_START_REQUEST_CODE_OFFSET = 10_000
+    private const val SCHEDULE_STOP_REQUEST_CODE_OFFSET = 15_000
     private const val TIMER_STOP_REQUEST_CODE_OFFSET = 20_000
 
     fun scheduleRule(context: Context, rule: BlockRule) {
         if (rule.ruleType != RuleType.SCHEDULED) return
-        val workManager = WorkManager.getInstance(context)
+        cancelScheduledAlarm(context, rule.id, ScheduleAlarmReceiver.ACTION_START)
+        cancelScheduledAlarm(context, rule.id, ScheduleAlarmReceiver.ACTION_STOP)
+        WorkManager.getInstance(context).cancelAllWorkByTag("rule_start_${rule.id}")
+        WorkManager.getInstance(context).cancelAllWorkByTag("rule_stop_${rule.id}")
 
-        val startDelay = calculateDelayToNextOccurrence(
-            hour = rule.startHour ?: 0,
-            minute = rule.startMinute ?: 0,
-            activeDays = rule.activeDays
-        )
+        val startTriggerAtMillis = if (!rule.isActive && isWithinScheduledWindow(rule)) {
+            System.currentTimeMillis() + 1_000L
+        } else {
+            calculateNextOccurrenceTimeMillis(
+                hour = rule.startHour ?: 0,
+                minute = rule.startMinute ?: 0,
+                activeDays = rule.activeDays
+            )
+        }
 
-        val startWork = OneTimeWorkRequestBuilder<StartRuleWorker>()
-            .setInitialDelay(startDelay, TimeUnit.MILLISECONDS)
-            .setInputData(workDataOf(StartRuleWorker.KEY_RULE_ID to rule.id))
-            .addTag("rule_start_${rule.id}")
-            .build()
+        val stopTriggerAtMillis = calculateNextStopTimeMillis(rule)
 
-        workManager.enqueueUniqueWork(
-            "rule_start_${rule.id}",
-            ExistingWorkPolicy.REPLACE,
-            startWork
-        )
+        scheduleScheduledAlarm(context, rule.id, ScheduleAlarmReceiver.ACTION_START, startTriggerAtMillis)
+        scheduleScheduledAlarm(context, rule.id, ScheduleAlarmReceiver.ACTION_STOP, stopTriggerAtMillis)
     }
 
     fun scheduleTimerStop(context: Context, rule: BlockRule) {
@@ -71,6 +73,8 @@ object RuleScheduler {
     fun cancelRule(context: Context, ruleId: Int) {
         WorkManager.getInstance(context).cancelAllWorkByTag("rule_start_$ruleId")
         WorkManager.getInstance(context).cancelAllWorkByTag("rule_stop_$ruleId")
+        cancelScheduledAlarm(context, ruleId, ScheduleAlarmReceiver.ACTION_START)
+        cancelScheduledAlarm(context, ruleId, ScheduleAlarmReceiver.ACTION_STOP)
         cancelExactTimerStopAlarm(context, ruleId)
     }
 
@@ -79,7 +83,53 @@ object RuleScheduler {
         cancelExactTimerStopAlarm(context, ruleId)
     }
 
-    private fun calculateDelayToNextOccurrence(
+    fun isWithinScheduledWindow(rule: BlockRule, nowMillis: Long = System.currentTimeMillis()): Boolean {
+        val startHour = rule.startHour ?: return false
+        val startMinute = rule.startMinute ?: return false
+        val endHour = rule.endHour ?: return false
+        val endMinute = rule.endMinute ?: return false
+        val activeDays = rule.activeDays?.takeIf { it.isNotEmpty() } ?: listOf(1, 2, 3, 4, 5, 6, 7)
+        val calendarDays = mapOf(
+            Calendar.MONDAY to 1,
+            Calendar.TUESDAY to 2,
+            Calendar.WEDNESDAY to 3,
+            Calendar.THURSDAY to 4,
+            Calendar.FRIDAY to 5,
+            Calendar.SATURDAY to 6,
+            Calendar.SUNDAY to 7
+        )
+
+        for (offset in -1..0) {
+            val start = Calendar.getInstance().apply {
+                timeInMillis = nowMillis
+                add(Calendar.DAY_OF_YEAR, offset)
+                set(Calendar.HOUR_OF_DAY, startHour)
+                set(Calendar.MINUTE, startMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val customDay = calendarDays[start.get(Calendar.DAY_OF_WEEK)] ?: continue
+            if (customDay !in activeDays) continue
+
+            val end = (start.clone() as Calendar).apply {
+                set(Calendar.HOUR_OF_DAY, endHour)
+                set(Calendar.MINUTE, endMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (timeInMillis <= start.timeInMillis) {
+                    add(Calendar.DAY_OF_YEAR, 1)
+                }
+            }
+
+            if (nowMillis in start.timeInMillis until end.timeInMillis) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private fun calculateNextOccurrenceTimeMillis(
         hour: Int,
         minute: Int,
         activeDays: List<Int>?
@@ -110,11 +160,111 @@ object RuleScheduler {
                 ?: continue
 
             if (candidateCustomDay in days && candidate.timeInMillis > now.timeInMillis) {
-                return candidate.timeInMillis - now.timeInMillis
+                return candidate.timeInMillis
             }
         }
 
-        return 0L
+        return now.timeInMillis + TimeUnit.DAYS.toMillis(1)
+    }
+
+    private fun calculateNextStopTimeMillis(rule: BlockRule): Long {
+        val startHour = rule.startHour ?: return System.currentTimeMillis() + 60_000L
+        val startMinute = rule.startMinute ?: 0
+        val endHour = rule.endHour ?: return System.currentTimeMillis() + 60_000L
+        val endMinute = rule.endMinute ?: 0
+        val now = System.currentTimeMillis()
+        val days = rule.activeDays?.takeIf { it.isNotEmpty() } ?: listOf(1, 2, 3, 4, 5, 6, 7)
+        val calendarDays = mapOf(
+            Calendar.MONDAY to 1,
+            Calendar.TUESDAY to 2,
+            Calendar.WEDNESDAY to 3,
+            Calendar.THURSDAY to 4,
+            Calendar.FRIDAY to 5,
+            Calendar.SATURDAY to 6,
+            Calendar.SUNDAY to 7
+        )
+
+        var closest: Long? = null
+        for (offset in -1..7) {
+            val start = Calendar.getInstance().apply {
+                timeInMillis = now
+                add(Calendar.DAY_OF_YEAR, offset)
+                set(Calendar.HOUR_OF_DAY, startHour)
+                set(Calendar.MINUTE, startMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val customDay = calendarDays[start.get(Calendar.DAY_OF_WEEK)] ?: continue
+            if (customDay !in days) continue
+
+            val end = (start.clone() as Calendar).apply {
+                set(Calendar.HOUR_OF_DAY, endHour)
+                set(Calendar.MINUTE, endMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (timeInMillis <= start.timeInMillis) {
+                    add(Calendar.DAY_OF_YEAR, 1)
+                }
+            }
+
+            if (end.timeInMillis > now && (closest == null || end.timeInMillis < closest)) {
+                closest = end.timeInMillis
+            }
+        }
+
+        return closest ?: (now + TimeUnit.DAYS.toMillis(1))
+    }
+
+    private fun scheduleScheduledAlarm(
+        context: Context,
+        ruleId: Int,
+        action: String,
+        triggerAtMillis: Long
+    ) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val pendingIntent = buildScheduledPendingIntent(
+            context = context,
+            ruleId = ruleId,
+            action = action,
+            flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        ) ?: return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+        }
+    }
+
+    private fun cancelScheduledAlarm(context: Context, ruleId: Int, action: String) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val pendingIntent = buildScheduledPendingIntent(
+            context = context,
+            ruleId = ruleId,
+            action = action,
+            flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        ) ?: return
+
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+    }
+
+    private fun buildScheduledPendingIntent(
+        context: Context,
+        ruleId: Int,
+        action: String,
+        flags: Int
+    ): PendingIntent? {
+        val requestCode = when (action) {
+            ScheduleAlarmReceiver.ACTION_START -> SCHEDULE_START_REQUEST_CODE_OFFSET + ruleId
+            ScheduleAlarmReceiver.ACTION_STOP -> SCHEDULE_STOP_REQUEST_CODE_OFFSET + ruleId
+            else -> return null
+        }
+        val intent = Intent(context, ScheduleAlarmReceiver::class.java).apply {
+            putExtra(ScheduleAlarmReceiver.EXTRA_RULE_ID, ruleId)
+            putExtra(ScheduleAlarmReceiver.EXTRA_ACTION, action)
+        }
+        return PendingIntent.getBroadcast(context, requestCode, intent, flags)
     }
 
     private fun scheduleExactTimerStopAlarm(context: Context, ruleId: Int, durationMinutes: Int) {
@@ -178,7 +328,8 @@ class StartRuleWorker @AssistedInject constructor(
 
         val rule = repository.getRuleById(ruleId) ?: return Result.failure()
         repository.setRuleActive(ruleId, true)
-        vpnController.startVpn(rule.blockedPackages)
+        val activeRules = repository.getActiveRulesOnce()
+        vpnController.startVpn(activeRules.flatMap { it.blockedPackages }.distinct())
 
         val stopDelay = calculateStopDelay(rule)
         if (stopDelay > 0) {

@@ -1,9 +1,13 @@
 package com.beoffline.app.ui.screens
 
+import android.Manifest
+import android.os.Build
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -145,6 +149,11 @@ fun DashboardScreen(
     var showSupportSheet by remember { mutableStateOf(false) }
     var showIssueDialog by remember { mutableStateOf(false) }
     var showIssueSubmittedDialog by remember { mutableStateOf(false) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        viewModel.refreshBackgroundProtection()
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -238,8 +247,13 @@ fun DashboardScreen(
             BackgroundProtectionDialog(
                 status = uiState.backgroundProtection,
                 onBatteryClick = viewModel::openBatteryOptimizationSettings,
-                onExactAlarmClick = viewModel::openExactAlarmSettings,
-                onAppSettingsClick = viewModel::openAppSettings
+                onNotificationClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        viewModel.openNotificationSettings()
+                    }
+                }
             )
         }
         uiState.showWelcomeDialog -> {
@@ -249,7 +263,9 @@ fun DashboardScreen(
 
     if (showSupportSheet) {
         SupportSheet(
+            blockedTrafficAlertsEnabled = uiState.blockedTrafficAlertsEnabled,
             onDismiss = { showSupportSheet = false },
+            onBlockedTrafficAlertsChange = viewModel::setBlockedTrafficAlertsEnabled,
             onReportIssue = {
                 showSupportSheet = false
                 showIssueDialog = true
@@ -557,7 +573,9 @@ private fun EmptyRulesPrompt() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SupportSheet(
+    blockedTrafficAlertsEnabled: Boolean,
     onDismiss: () -> Unit,
+    onBlockedTrafficAlertsChange: (Boolean) -> Unit,
     onReportIssue: () -> Unit
 ) {
     ModalBottomSheet(
@@ -580,6 +598,46 @@ private fun SupportSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary
             )
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Brand700),
+                border = BorderStroke(1.dp, AccentPrimary.copy(alpha = 0.18f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Blocked app alerts",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Get a gentle notification when BeOffline catches blocked apps trying to connect.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = blockedTrafficAlertsEnabled,
+                        onCheckedChange = onBlockedTrafficAlertsChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = AccentPrimary
+                        )
+                    )
+                }
+            }
 
             Card(
                 modifier = Modifier
@@ -828,7 +886,7 @@ private fun WelcomeDialog(onContinue: () -> Unit) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 320.dp)
+                        .heightIn(max = 352.dp)
                         .verticalScroll(scrollState),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -907,90 +965,172 @@ private fun WelcomeFeatureCard(title: String, body: String) {
 private fun BackgroundProtectionDialog(
     status: BackgroundProtectionStatus?,
     onBatteryClick: () -> Unit,
-    onExactAlarmClick: () -> Unit,
-    onAppSettingsClick: () -> Unit
+    onNotificationClick: () -> Unit
 ) {
     if (status == null) return
 
-    AlertDialog(
-        onDismissRequest = {},
-        title = {
-            Text(
-                text = "Allow Background Access",
-                style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary
+    Dialog(onDismissRequest = {}) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(30.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF20264B), Brand800, Color(0xFF11152A))
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = AccentSecondary.copy(alpha = 0.28f),
+                    shape = RoundedCornerShape(30.dp)
+                )
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(140.dp)
+                    .clip(CircleShape)
+                    .background(AccentPrimary.copy(alpha = 0.10f))
             )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(AccentPrimary, AccentSecondary)
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "!",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Color.White
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(AccentPrimary.copy(alpha = 0.16f))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "Required setup",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AccentSecondary
+                            )
+                        }
+                        Text(
+                            text = "Allow Background Access",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = TextPrimary
+                        )
+                    }
+                }
+
                 Text(
-                    text = "BeOffline needs these settings before it can reliably keep rules active in the background.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "A couple of permissions help BeOffline stay reliable when your phone tries to sleep apps in the background.",
+                    style = MaterialTheme.typography.bodyLarge,
                     color = TextSecondary
                 )
 
-                ProtectionStatusRow(
+                PermissionRequirementCard(
                     title = "Battery optimization",
-                    ok = status.batteryOptimizationIgnored,
-                    okLabel = "Allowed",
-                    actionLabel = "Required"
+                    description = "Keeps BeOffline from being put to sleep while your rules are supposed to stay active.",
+                    ok = status.batteryOptimizationIgnored
                 )
-                ProtectionStatusRow(
-                    title = "Reliable timers",
-                    ok = status.exactAlarmAllowed,
-                    okLabel = "Allowed",
-                    actionLabel = "Required"
+                PermissionRequirementCard(
+                    title = "Notifications",
+                    description = "Lets BeOffline show important status updates while it's protecting your focus.",
+                    ok = status.notificationsEnabled
                 )
 
                 if (!status.batteryOptimizationIgnored) {
                     Button(
                         onClick = onBatteryClick,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
                     ) {
-                        Text("Allow Background Activity")
+                        Text("Allow Background Activity", style = MaterialTheme.typography.labelLarge, color = Color.White)
                     }
                 }
 
-                if (!status.exactAlarmAllowed) {
+                if (!status.notificationsEnabled) {
                     Button(
-                        onClick = onExactAlarmClick,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Brand700)
+                        onClick = onNotificationClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
                     ) {
-                        Text("Allow Reliable Timers")
-                    }
-                }
-
-                TextButton(
-                    onClick = onAppSettingsClick,
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text("Open App Settings", color = AccentSecondary)
-                }
-
-                if (status.manufacturerInstructions.isNotEmpty()) {
-                    Text(
-                        text = "${status.manufacturer} tips",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = TextPrimary
-                    )
-                    status.manufacturerInstructions.forEach { step ->
-                        Text(
-                            text = "- $step",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
+                        Text("Allow Notifications", style = MaterialTheme.typography.labelLarge, color = Color.White)
                     }
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {},
-        containerColor = Brand800
-    )
+        }
+    }
+}
+
+@Composable
+private fun PermissionRequirementCard(
+    title: String,
+    description: String,
+    ok: Boolean
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.04f))
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.06f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary
+                )
+                Text(
+                    text = if (ok) "Allowed" else "Required",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (ok) StatusActive else StatusDanger
+                )
+            }
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary
+            )
+        }
+    }
 }
 
 @Composable

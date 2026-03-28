@@ -5,7 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.beoffline.app.data.repository.BlockRuleRepository
-import com.beoffline.app.scheduler.StartRuleWorker
+import com.beoffline.app.data.model.RuleType
+import com.beoffline.app.scheduler.RuleScheduler
 import com.beoffline.app.vpn.VpnController
 import com.beoffline.app.vpn.VpnResilienceScheduler
 import dagger.hilt.android.AndroidEntryPoint
@@ -43,13 +44,28 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
             try {
                 when (action) {
                     ACTION_START -> {
-                        androidx.work.OneTimeWorkRequest.Builder(StartRuleWorker::class.java)
-                            .setInputData(androidx.work.workDataOf(StartRuleWorker.KEY_RULE_ID to ruleId))
-                            .build()
-                            .also { androidx.work.WorkManager.getInstance(context).enqueue(it) }
+                        val rule = repository.getRuleById(ruleId) ?: return@launch
+                        if (rule.ruleType == RuleType.SCHEDULED &&
+                            !RuleScheduler.isWithinScheduledWindow(rule)
+                        ) {
+                            RuleScheduler.scheduleRule(context, rule.copy(isActive = false))
+                            return@launch
+                        }
+
+                        repository.setRuleActive(ruleId, true)
+
+                        val activeRules = repository.getActiveRulesOnce()
+                        val activePackages = activeRules.flatMap { it.blockedPackages }.distinct()
+                        VpnResilienceScheduler.ensureHealthMonitor(context)
+                        vpnController.startVpn(activePackages)
+
+                        if (rule.ruleType == RuleType.SCHEDULED) {
+                            RuleScheduler.scheduleRule(context, rule.copy(isActive = true))
+                        }
                     }
 
                     ACTION_STOP -> {
+                        val rule = repository.getRuleById(ruleId)
                         repository.setRuleActive(ruleId, false)
                         repository.setTimerStartedAt(ruleId, null)
 
@@ -61,6 +77,10 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
                             val remainingPackages = remainingRules.flatMap { it.blockedPackages }.distinct()
                             VpnResilienceScheduler.ensureHealthMonitor(context)
                             vpnController.startVpn(remainingPackages)
+                        }
+
+                        if (rule?.ruleType == RuleType.SCHEDULED) {
+                            RuleScheduler.scheduleRule(context, rule.copy(isActive = false))
                         }
                     }
                 }

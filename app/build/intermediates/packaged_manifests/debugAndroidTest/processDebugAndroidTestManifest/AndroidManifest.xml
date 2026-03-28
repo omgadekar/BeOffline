@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.beoffline.app.debug.test" >
+    package="com.beoffline.app.test" >
 
     <uses-sdk
         android:minSdkVersion="26"
@@ -10,8 +10,8 @@
         android:name="androidx.test.runner.AndroidJUnitRunner"
         android:functionalTest="false"
         android:handleProfiling="false"
-        android:label="Tests for com.beoffline.app.debug"
-        android:targetPackage="com.beoffline.app.debug" />
+        android:label="Tests for com.beoffline.app"
+        android:targetPackage="com.beoffline.app" />
 
     <uses-permission android:name="android.permission.REORDER_TASKS" />
 

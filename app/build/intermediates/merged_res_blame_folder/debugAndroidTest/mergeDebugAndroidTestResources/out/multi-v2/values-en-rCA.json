@@ -4,24 +4,7 @@
             "outputFile": "com.beoffline.app.test.app-mergeDebugAndroidTestResources-32:/values-en-rCA/values-en-rCA.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\7bc17e4f18bd69d0592f302181ef98a9\\transformed\\core-1.13.1\\res\\values-en-rCA\\values-en-rCA.xml",
-                    "from": {
-                        "startLines": "2,3,4,5,6,7,8,9",
-                        "startColumns": "4,4,4,4,4,4,4,4",
-                        "startOffsets": "55,151,253,352,451,555,657,773",
-                        "endColumns": "95,101,98,98,103,101,115,100",
-                        "endOffsets": "146,248,347,446,550,652,768,869"
-                    },
-                    "to": {
-                        "startLines": "2,3,4,5,6,7,8,23",
-                        "startColumns": "4,4,4,4,4,4,4,4",
-                        "startOffsets": "105,201,303,402,501,605,707,1983",
-                        "endColumns": "95,101,98,98,103,101,115,100",
-                        "endOffsets": "196,298,397,496,600,702,818,2079"
-                    }
-                },
-                {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\b11c1064d2bc26abfdca9f76fbaf0adc\\transformed\\ui-release\\res\\values-en-rCA\\values-en-rCA.xml",
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\4851073c6ab99da04b73d0c13b3113af\\transformed\\ui-release\\res\\values-en-rCA\\values-en-rCA.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
@@ -35,6 +18,23 @@
                         "startOffsets": "823,915,997,1091,1190,1276,1358,1448,1537,1621,1686,1750,1828,1910,2084,2161,2227",
                         "endColumns": "91,81,93,98,85,81,89,88,83,64,63,77,81,72,76,65,119",
                         "endOffsets": "910,992,1086,1185,1271,1353,1443,1532,1616,1681,1745,1823,1905,1978,2156,2222,2342"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\398795de071e4af97e688beccc493b50\\transformed\\core-1.13.1\\res\\values-en-rCA\\values-en-rCA.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,151,253,352,451,555,657,773",
+                        "endColumns": "95,101,98,98,103,101,115,100",
+                        "endOffsets": "146,248,347,446,550,652,768,869"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5,6,7,8,23",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "105,201,303,402,501,605,707,1983",
+                        "endColumns": "95,101,98,98,103,101,115,100",
+                        "endOffsets": "196,298,397,496,600,702,818,2079"
                     }
                 }
             ]

@@ -24,6 +24,7 @@ class BlockRuleRepository @Inject constructor(
 
     fun getAllRules(): Flow<List<BlockRule>> = dao.getAllRules()
     fun getActiveRules(): Flow<List<BlockRule>> = dao.getActiveRules()
+    suspend fun getAllRulesOnce(): List<BlockRule> = dao.getAllRules().first()
     suspend fun getRuleById(id: Int) = dao.getRuleById(id)
     suspend fun saveRule(rule: BlockRule): Long = dao.insertRule(rule)
     suspend fun updateRule(rule: BlockRule) = dao.updateRule(rule)

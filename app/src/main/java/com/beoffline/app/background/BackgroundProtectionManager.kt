@@ -1,25 +1,30 @@
 package com.beoffline.app.background
 
+import android.Manifest
 import android.app.AlarmManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 data class BackgroundProtectionStatus(
     val batteryOptimizationIgnored: Boolean,
+    val notificationsEnabled: Boolean,
     val exactAlarmAllowed: Boolean,
     val manufacturer: String,
     val manufacturerInstructions: List<String>
 ) {
     val needsAttention: Boolean
-        get() = !batteryOptimizationIgnored || !exactAlarmAllowed
+        get() = !batteryOptimizationIgnored || !notificationsEnabled
 }
 
 @Singleton
@@ -30,6 +35,7 @@ class BackgroundProtectionManager @Inject constructor(
     fun getStatus(): BackgroundProtectionStatus {
         return BackgroundProtectionStatus(
             batteryOptimizationIgnored = isIgnoringBatteryOptimizations(),
+            notificationsEnabled = areNotificationsEnabled(),
             exactAlarmAllowed = canScheduleExactAlarms(),
             manufacturer = Build.MANUFACTURER.orEmpty().replaceFirstChar { it.uppercase() },
             manufacturerInstructions = manufacturerInstructions()
@@ -60,6 +66,21 @@ class BackgroundProtectionManager @Inject constructor(
         tryStart(requestIntent, fallbackIntent)
     }
 
+    fun openNotificationSettings() {
+        val packageUri = Uri.parse("package:${context.packageName}")
+        val primaryIntent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            data = packageUri
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val fallbackIntent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            packageUri
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        tryStart(primaryIntent, fallbackIntent)
+    }
+
     fun openAppDetailsSettings() {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -78,6 +99,18 @@ class BackgroundProtectionManager @Inject constructor(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return false
         return alarmManager.canScheduleExactAlarms()
+    }
+
+    private fun areNotificationsEnabled(): Boolean {
+        val notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return notificationsEnabled
+        }
+        val permissionGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        return notificationsEnabled && permissionGranted
     }
 
     private fun manufacturerInstructions(): List<String> {

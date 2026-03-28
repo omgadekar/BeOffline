@@ -10,6 +10,7 @@ import com.beoffline.app.data.model.BlockRule
 import com.beoffline.app.data.model.RuleType
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.scheduler.RuleScheduler
+import com.beoffline.app.support.BlockedTrafficAlertManager
 import com.beoffline.app.support.IssueReporter
 import com.beoffline.app.vpn.VpnController
 import com.beoffline.app.vpn.VpnStateManager
@@ -30,6 +31,7 @@ data class DashboardUiState(
     val activeRules: List<BlockRule> = emptyList(),
     val appInfosByRule: Map<Int, List<AppInfo>> = emptyMap(),
     val backgroundProtection: BackgroundProtectionStatus? = null,
+    val blockedTrafficAlertsEnabled: Boolean = true,
     val showWelcomeDialog: Boolean = false,
     val isLoading: Boolean = false
 )
@@ -39,13 +41,19 @@ class DashboardViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val backgroundProtectionManager: BackgroundProtectionManager,
     private val repository: BlockRuleRepository,
+    private val blockedTrafficAlertManager: BlockedTrafficAlertManager,
     private val issueReporter: IssueReporter,
     private val vpnController: VpnController,
     private val vpnStateManager: VpnStateManager
 ) : ViewModel() {
 
     private val preferences = context.getSharedPreferences("dashboard_ui", Context.MODE_PRIVATE)
-    private val _uiState = MutableStateFlow(DashboardUiState(isLoading = true))
+    private val _uiState = MutableStateFlow(
+        DashboardUiState(
+            isLoading = true,
+            blockedTrafficAlertsEnabled = blockedTrafficAlertManager.isEnabled()
+        )
+    )
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
@@ -123,6 +131,7 @@ class DashboardViewModel @Inject constructor(
 
     fun deleteRule(rule: BlockRule) {
         viewModelScope.launch {
+            RuleScheduler.cancelRule(context, rule.id)
             if (rule.isActive) deactivateRuleInternal(rule)
             repository.deleteRule(rule)
         }
@@ -163,9 +172,18 @@ class DashboardViewModel @Inject constructor(
         backgroundProtectionManager.openAppDetailsSettings()
     }
 
+    fun openNotificationSettings() {
+        backgroundProtectionManager.openNotificationSettings()
+    }
+
     fun dismissWelcomeDialog() {
         preferences.edit().putBoolean(KEY_WELCOME_DIALOG_SEEN, true).apply()
         _uiState.update { it.copy(showWelcomeDialog = false) }
+    }
+
+    fun setBlockedTrafficAlertsEnabled(enabled: Boolean) {
+        blockedTrafficAlertManager.setEnabled(enabled)
+        _uiState.update { it.copy(blockedTrafficAlertsEnabled = enabled) }
     }
 
     fun submitIssueReport(title: String, details: String) {

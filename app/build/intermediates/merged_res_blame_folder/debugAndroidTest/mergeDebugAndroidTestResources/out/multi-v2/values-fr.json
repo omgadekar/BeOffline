@@ -4,7 +4,7 @@
             "outputFile": "com.beoffline.app.test.app-mergeDebugAndroidTestResources-32:/values-fr/values-fr.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\7bc17e4f18bd69d0592f302181ef98a9\\transformed\\core-1.13.1\\res\\values-fr\\values-fr.xml",
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\398795de071e4af97e688beccc493b50\\transformed\\core-1.13.1\\res\\values-fr\\values-fr.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",
@@ -21,7 +21,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\b11c1064d2bc26abfdca9f76fbaf0adc\\transformed\\ui-release\\res\\values-fr\\values-fr.xml",
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\4851073c6ab99da04b73d0c13b3113af\\transformed\\ui-release\\res\\values-fr\\values-fr.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",

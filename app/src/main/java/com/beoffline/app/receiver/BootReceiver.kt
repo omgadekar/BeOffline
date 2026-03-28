@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.beoffline.app.data.repository.BlockRuleRepository
+import com.beoffline.app.data.model.RuleType
+import com.beoffline.app.scheduler.RuleScheduler
 import com.beoffline.app.vpn.VpnController
 import com.beoffline.app.vpn.VpnResilienceScheduler
 import dagger.hilt.android.AndroidEntryPoint
@@ -49,6 +51,11 @@ class BootReceiver : BroadcastReceiver() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val allRules = repository.getAllRulesOnce()
+                allRules
+                    .filter { it.ruleType == RuleType.SCHEDULED }
+                    .forEach { RuleScheduler.scheduleRule(context, it) }
+
                 val activePackages = repository.getActiveBlockedPackages()
                 if (activePackages.isNotEmpty()) {
                     Log.d(TAG, "Restoring VPN for ${activePackages.size} packages.")

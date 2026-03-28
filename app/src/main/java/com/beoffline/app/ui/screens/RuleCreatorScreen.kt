@@ -150,7 +150,7 @@ fun RuleCreatorScreen(
         },
         bottomBar = {
             Button(
-                onClick = { viewModel.saveRule(); onBack() },
+                onClick = { viewModel.saveRule(onSaved = onBack) },
                 enabled = uiState.isValid,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -265,6 +265,13 @@ fun RuleCreatorScreen(
                         }
                         Text("Repeat Days", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
                         DaySelector(activeDays = uiState.activeDays, onToggleDay = viewModel::onToggleDay)
+                        uiState.scheduleError?.let { error ->
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = StatusDanger
+                            )
+                        }
                     }
                 }
             }
@@ -499,7 +506,7 @@ private fun TimePickerDialogField(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
             Text(
-                text = if (hour != null) "%02d:%02d".format(hour, minute ?: 0) else "--:--",
+                text = if (hour != null) formatTime12Hour(hour, minute ?: 0) else "--:--",
                 style = MaterialTheme.typography.titleMedium,
                 color = if (hour != null) TextPrimary else TextDisabled
             )
@@ -643,4 +650,14 @@ private fun formatTimerDurationShort(minutes: Int): String {
         hours > 0 -> "${hours}h"
         else -> "${minutes}m"
     }
+}
+
+private fun formatTime12Hour(hour: Int, minute: Int): String {
+    val displayHour = when {
+        hour == 0 -> 12
+        hour > 12 -> hour - 12
+        else -> hour
+    }
+    val period = if (hour < 12) "AM" else "PM"
+    return "%d:%02d %s".format(displayHour, minute, period)
 }
