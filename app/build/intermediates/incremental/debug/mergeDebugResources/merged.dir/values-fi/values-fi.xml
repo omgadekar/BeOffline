@@ -9,6 +9,7 @@
     <string msgid="59049573811482460" name="call_notification_screening_text">"Seulotaan saapuvaa puhelua"</string>
     <string msgid="406453423630273620" name="close_drawer">"Sulje navigointivalikko"</string>
     <string msgid="7573152094250666567" name="close_sheet">"Sulje taulukko"</string>
+    <string name="common_google_play_services_unknown_issue">Sovelluksella %1$s on ongelmia Google Play Palveluiden kanssa. Yritä uudelleen.</string>
     <string msgid="8038256446254964252" name="default_error_message">"Virheellinen syöte"</string>
     <string msgid="6312721426453364202" name="default_popup_window_title">"Ponnahdusikkuna"</string>
     <string msgid="1890207353314751437" name="dropdown_menu">"Avattava valikko"</string>

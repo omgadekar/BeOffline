@@ -9,6 +9,7 @@
     <string msgid="59049573811482460" name="call_notification_screening_text">"Síar símtal sem berst"</string>
     <string msgid="406453423630273620" name="close_drawer">"Loka yfirlitsvalmynd"</string>
     <string msgid="7573152094250666567" name="close_sheet">"Loka blaði"</string>
+    <string name="common_google_play_services_unknown_issue">%1$s á í vandræðum með þjónustu Google Play. Reyndu aftur.</string>
     <string msgid="8038256446254964252" name="default_error_message">"Ógildur innsláttur"</string>
     <string msgid="6312721426453364202" name="default_popup_window_title">"Sprettigluggi"</string>
     <string msgid="1890207353314751437" name="dropdown_menu">"Fellivalmynd"</string>

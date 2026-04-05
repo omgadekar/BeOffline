@@ -12,13 +12,13 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.beoffline.app.MainActivity
 import com.beoffline.app.R
-import com.beoffline.app.data.model.BlockRule
+import com.beoffline.app.data.model.RuleType
+import com.beoffline.app.data.repository.BlockRuleRepository
+import com.beoffline.app.scheduler.RuleScheduler
+import com.beoffline.app.support.BlockedTrafficAlertManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
-import java.net.InetAddress
-import java.nio.ByteBuffer
 import javax.inject.Inject
-
 /**
  * BeOfflineVpnService — The heart of the application.
  *
@@ -29,7 +29,8 @@ import javax.inject.Inject
  *
  * We then intentionally do NOTHING with the packets — they enter our tunnel and are
  * silently discarded. To the app (e.g., WhatsApp), the phone appears to have no
- * internet connection at all. Messages are never delivered; notifications never fire.
+ * internet connection at all. Note that some push notifications may still be delivered
+ * by Android system services unless they are separately dismissed by notification access.
  *
  * Meanwhile, every app NOT in our blocked list bypasses the tunnel entirely and
  * continues to use the real network interface normally.
@@ -58,9 +59,16 @@ class BeOfflineVpnService : VpnService() {
     @Inject
     lateinit var vpnStateManager: VpnStateManager
 
+    @Inject
+    lateinit var repository: BlockRuleRepository
+
+    @Inject
+    lateinit var blockedTrafficAlertManager: BlockedTrafficAlertManager
+
     private var vpnInterface: ParcelFileDescriptor? = null
     private var vpnJob: Job? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var stopRequested = false
 
     // The list of package names whose internet access will be blocked.
     private var blockedPackages: List<String> = emptyList()
@@ -72,8 +80,10 @@ class BeOfflineVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return when (intent?.action) {
             ACTION_START -> {
+                stopRequested = false
                 blockedPackages = intent.getStringArrayListExtra(EXTRA_BLOCKED_PACKAGES)
                     ?: emptyList<String>() as ArrayList<String>
+                blockedTrafficAlertManager.markSessionStarted()
 
                 Log.d(TAG, "Starting VPN. Blocking ${blockedPackages.size} apps: $blockedPackages")
                 startForeground(NOTIFICATION_ID, buildNotification(blockedPackages.size))
@@ -81,9 +91,27 @@ class BeOfflineVpnService : VpnService() {
                 START_STICKY // OS will restart service if killed
             }
             ACTION_STOP -> {
+                stopRequested = true
+                blockedTrafficAlertManager.markSessionStopped()
                 Log.d(TAG, "Stop command received.")
-                stopVpn()
-                stopSelf()
+                serviceScope.launch {
+                    runCatching {
+                        repository.getActiveRulesOnce().forEach { activeRule ->
+                            if (activeRule.ruleType == RuleType.TIMER) {
+                                repository.setTimerStartedAt(activeRule.id, null)
+                                RuleScheduler.cancelTimerStop(this@BeOfflineVpnService, activeRule.id)
+                            }
+                            repository.setRuleActive(activeRule.id, false)
+                        }
+                    }.onFailure { error ->
+                        Log.e(TAG, "Failed clearing active rules from notification stop.", error)
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        stopVpn()
+                        stopSelf()
+                    }
+                }
                 START_NOT_STICKY
             }
             else -> START_NOT_STICKY
@@ -98,9 +126,19 @@ class BeOfflineVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        if (shouldScheduleRecovery()) {
+            VpnResilienceScheduler.scheduleRecovery(this)
+        }
         super.onDestroy()
         stopVpn()
         serviceScope.cancel()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (shouldScheduleRecovery()) {
+            VpnResilienceScheduler.scheduleRecovery(this)
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     // =========================================================================
@@ -171,26 +209,50 @@ class BeOfflineVpnService : VpnService() {
      */
     private fun startPacketDropLoop() {
         val vpnFd = vpnInterface ?: return
-        val buffer = ByteBuffer.allocate(32767)
+        // Use a plain ByteArray — 32KB covers max IP packet size
+        val buffer = ByteArray(32767)
 
         vpnJob = serviceScope.launch {
-            val inputStream = ParcelFileDescriptor.AutoCloseInputStream(vpnFd)
+            // FileInputStream from the raw fd — does NOT close the ParcelFileDescriptor
+            // when the stream itself is closed. AutoCloseInputStream was closing the
+            // VPN fd on any IOException, which crashed the service on high-traffic apps
+            // like Instagram (which sends rapid QUIC/UDP bursts).
+            val inputStream = java.io.FileInputStream(vpnFd.fileDescriptor)
             Log.d(TAG, "Packet drop loop started.")
             try {
                 while (isActive) {
-                    val bytesRead = inputStream.read(buffer.array())
-                    if (bytesRead > 0) {
-                        // Packet received from blocked app — silently discard it.
-                        buffer.clear()
-                        // No forwarding. The packet dies here. 🎯
-                    } else {
-                        // No data — yield to prevent spin-loop on empty reads
-                        delay(10)
+                    val bytesRead = try {
+                        inputStream.read(buffer)
+                    } catch (e: java.io.IOException) {
+                        // EAGAIN: non-blocking fd with no data yet — not a real error
+                        if (e.message?.contains("EAGAIN") == true) {
+                            delay(5)
+                            continue
+                        }
+                        // Real IO error (fd closed, VPN revoked) — exit cleanly
+                        Log.w(TAG, "Packet loop IO error: ${e.message}")
+                        break
+                    }
+
+                    when {
+                        bytesRead > 0 -> {
+                            blockedTrafficAlertManager.notifyBlockedTrafficAttempt(blockedPackages)
+                            // Packet received — silently discard. The packet dies here. 🎯
+                        }
+                        bytesRead == 0 -> {
+                            // Empty non-blocking read
+                            delay(5)
+                        }
+                        else -> {
+                            // -1 = EOF — VPN interface was closed externally
+                            Log.d(TAG, "Packet loop: EOF on tun fd, exiting.")
+                            break
+                        }
                     }
                 }
             } catch (e: Exception) {
                 if (isActive) {
-                    Log.e(TAG, "Packet loop error: ${e.message}")
+                    Log.e(TAG, "Packet loop unexpected error: ${e.message}", e)
                 }
             }
             Log.d(TAG, "Packet drop loop ended.")
@@ -212,6 +274,11 @@ class BeOfflineVpnService : VpnService() {
         }
         vpnInterface = null
         vpnStateManager.setRunning(false)
+        blockedTrafficAlertManager.markSessionStopped()
+    }
+
+    private fun shouldScheduleRecovery(): Boolean {
+        return !stopRequested && blockedPackages.isNotEmpty()
     }
 
     // =========================================================================

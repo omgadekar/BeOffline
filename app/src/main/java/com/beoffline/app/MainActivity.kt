@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
         if (permissionIntent != null) {
             pendingBlockedPackages = blockedPackages
             vpnPermissionLauncher.launch(permissionIntent)
-        } else {
+        } else if (blockedPackages.isNotEmpty()) {
             // Already approved, start immediately
             vpnController.startVpn(blockedPackages)
         }

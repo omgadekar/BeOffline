@@ -47,5 +47,5 @@ interface BlockRuleDao {
     // ── Timer ─────────────────────────────────────────────────────────────────
 
     @Query("UPDATE block_rules SET timerStartedAt = :startedAt WHERE id = :id")
-    suspend fun setTimerStartedAt(id: Int, startedAt: Long)
+    suspend fun setTimerStartedAt(id: Int, startedAt: Long?)
 }

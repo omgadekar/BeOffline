@@ -9,6 +9,7 @@
     <string msgid="59049573811482460" name="call_notification_screening_text">"סינון שיחה נכנסת"</string>
     <string msgid="406453423630273620" name="close_drawer">"סגירת תפריט הניווט"</string>
     <string msgid="7573152094250666567" name="close_sheet">"סגירת הגיליון"</string>
+    <string name="common_google_play_services_unknown_issue">‏%1$s נתקלה בבעיה בשירותי Google Play. נסה שוב.</string>
     <string msgid="8038256446254964252" name="default_error_message">"הקלט לא תקין"</string>
     <string msgid="6312721426453364202" name="default_popup_window_title">"חלון קופץ"</string>
     <string msgid="1890207353314751437" name="dropdown_menu">"תפריט נפתח"</string>

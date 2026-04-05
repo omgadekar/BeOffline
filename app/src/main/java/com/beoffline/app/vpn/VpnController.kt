@@ -56,6 +56,8 @@ class VpnController @Inject constructor(
             Log.w(TAG, "startVpn called with no packages to block. Ignoring.")
             return
         }
+        VpnResilienceScheduler.cancelRecovery(context)
+        VpnResilienceScheduler.ensureHealthMonitor(context)
         Log.d(TAG, "Starting VPN for packages: $blockedPackages")
         val intent = Intent(context, BeOfflineVpnService::class.java).apply {
             action = BeOfflineVpnService.ACTION_START
@@ -72,6 +74,8 @@ class VpnController @Inject constructor(
      */
     fun stopVpn() {
         Log.d(TAG, "Stopping VPN.")
+        VpnResilienceScheduler.cancelRecovery(context)
+        VpnResilienceScheduler.cancelHealthMonitor(context)
         val intent = Intent(context, BeOfflineVpnService::class.java).apply {
             action = BeOfflineVpnService.ACTION_STOP
         }

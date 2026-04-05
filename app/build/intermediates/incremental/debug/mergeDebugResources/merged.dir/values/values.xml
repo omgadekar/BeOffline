@@ -103,6 +103,7 @@
     <id name="view_tree_view_model_store_owner"/>
     <item name="visible_removing_fragment_view_tag" type="id"/>
     <item name="wrapped_composition_tag" type="id"/>
+    <integer name="google_play_services_version">12451000</integer>
     <integer name="status_bar_notification_info_maxnum">999</integer>
     <string name="androidx_startup" translatable="false">androidx.startup</string>
     <string name="app_name">BeOffline</string>
@@ -115,9 +116,17 @@
     <string name="call_notification_screening_text">Screening an incoming call</string>
     <string name="close_drawer">"Close navigation menu"</string>
     <string name="close_sheet">"Close sheet"</string>
+    <string name="com.google.firebase.crashlytics.mapping_file_id" ns1:ignore="UnusedResources,TypographyDashes" translatable="false">00000000000000000000000000000000</string>
+    <string name="com.google.firebase.crashlytics.version_control_info">""</string>
+    <string name="common_google_play_services_unknown_issue"><ns2:g id="app_name">%1$s</ns2:g> is having trouble with Google Play services. Please try again.</string>
     <string name="default_error_message">"Invalid input"</string>
     <string name="default_popup_window_title" ns1:ignore="ExtraTranslation">"Pop-Up Window"</string>
     <string name="dropdown_menu">"Dropdown menu"</string>
+    <string name="gcm_defaultSenderId" translatable="false">1038929620243</string>
+    <string name="google_api_key" translatable="false">AIzaSyDXJISE_4Aq2g4Q0-HHOf0Ez9drHjFxer0</string>
+    <string name="google_app_id" translatable="false">1:1038929620243:android:fccdcd7b2168e2cef4bee6</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyDXJISE_4Aq2g4Q0-HHOf0Ez9drHjFxer0</string>
+    <string name="google_storage_bucket" translatable="false">beoffline-36d68.firebasestorage.app</string>
     <string name="in_progress">In progress</string>
     <string name="indeterminate">Partially checked</string>
     <string name="m3c_bottom_sheet_collapse_description">Collapse bottom sheet</string>
@@ -186,6 +195,7 @@
     <string name="notification_channel_name">BeOffline VPN Status</string>
     <string name="off">Off</string>
     <string name="on">On</string>
+    <string name="project_id" translatable="false">beoffline-36d68</string>
     <string name="range_end">"Range end"</string>
     <string name="range_start">"Range start"</string>
     <string name="selected">Selected</string>

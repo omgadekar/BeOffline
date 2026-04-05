@@ -9,6 +9,7 @@
     <string msgid="59049573811482460" name="call_notification_screening_text">"Ukuveza ikholi engenayo"</string>
     <string msgid="406453423630273620" name="close_drawer">"Vala imenyu yokuzulazula"</string>
     <string msgid="7573152094250666567" name="close_sheet">"Vala ishidi"</string>
+    <string name="common_google_play_services_unknown_issue">%1$s inenkinga ngamasevisi e-Google Play. Sicela uzame futhi.</string>
     <string msgid="8038256446254964252" name="default_error_message">"Okufakwayo okungalungile"</string>
     <string msgid="6312721426453364202" name="default_popup_window_title">"Iwindi Lesikhashana"</string>
     <string msgid="1890207353314751437" name="dropdown_menu">"Imenyu eya phansi"</string>

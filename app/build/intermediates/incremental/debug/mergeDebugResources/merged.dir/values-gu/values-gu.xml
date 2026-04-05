@@ -9,6 +9,7 @@
     <string msgid="59049573811482460" name="call_notification_screening_text">"ઇનકમિંગ કૉલનું સ્ક્રીનિંગ થાય છે"</string>
     <string msgid="406453423630273620" name="close_drawer">"નૅવિગેશન મેનૂ બંધ કરો"</string>
     <string msgid="7573152094250666567" name="close_sheet">"શીટ બંધ કરો"</string>
+    <string name="common_google_play_services_unknown_issue">%1$s ને Google Play સેવાઓમાં મુશ્કેલી આવી રહી છે. કૃપા કરીને ફરી પ્રયાસ કરો.</string>
     <string msgid="8038256446254964252" name="default_error_message">"અમાન્ય ઇનપુટ"</string>
     <string msgid="6312721426453364202" name="default_popup_window_title">"પૉપ-અપ વિન્ડો"</string>
     <string msgid="1890207353314751437" name="dropdown_menu">"ડ્રૉપડાઉન મેનૂ"</string>

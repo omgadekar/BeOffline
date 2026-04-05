@@ -4,19 +4,25 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.beoffline.app.data.repository.BlockRuleRepository
+import com.beoffline.app.data.model.RuleType
+import com.beoffline.app.scheduler.RuleScheduler
+import com.beoffline.app.vpn.VpnController
+import com.beoffline.app.vpn.VpnResilienceScheduler
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-/**
- * ScheduleAlarmReceiver — placeholder for AlarmManager-based exact alarms.
- *
- * WorkManager is our primary scheduling mechanism, but for cases where
- * Android's Doze mode might defer WorkManager tasks past the scheduled time,
- * we can optionally use AlarmManager with SCHEDULE_EXACT_ALARM permission
- * as a backup trigger for time-critical schedules.
- *
- * This receiver is a thin dispatcher that delegates to the appropriate
- * WorkManager worker based on the intent extra.
- */
+@AndroidEntryPoint
 class ScheduleAlarmReceiver : BroadcastReceiver() {
+
+    @Inject
+    lateinit var repository: BlockRuleRepository
+
+    @Inject
+    lateinit var vpnController: VpnController
 
     companion object {
         private const val TAG = "ScheduleAlarmReceiver"
@@ -29,32 +35,59 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val ruleId = intent.getIntExtra(EXTRA_RULE_ID, -1)
         val action = intent.getStringExtra(EXTRA_ACTION) ?: return
-        Log.d(TAG, "AlarmReceiver: action=$action ruleId=$ruleId")
+        if (ruleId == -1) return
 
-        // Trigger the appropriate WorkManager worker immediately
-        // This ensures work runs even if WorkManager was deferred by Doze
-        when (action) {
-            ACTION_START -> {
-                androidx.work.OneTimeWorkRequest.Builder(
-                    com.beoffline.app.scheduler.StartRuleWorker::class.java
-                ).setInputData(
-                    androidx.work.workDataOf(
-                        com.beoffline.app.scheduler.StartRuleWorker.KEY_RULE_ID to ruleId
-                    )
-                ).build().also {
-                    androidx.work.WorkManager.getInstance(context).enqueue(it)
+        Log.d(TAG, "Alarm received: action=$action ruleId=$ruleId")
+        val pendingResult = goAsync()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                when (action) {
+                    ACTION_START -> {
+                        val rule = repository.getRuleById(ruleId) ?: return@launch
+                        if (rule.ruleType == RuleType.SCHEDULED &&
+                            !RuleScheduler.isWithinScheduledWindow(rule)
+                        ) {
+                            RuleScheduler.scheduleRule(context, rule.copy(isActive = false))
+                            return@launch
+                        }
+
+                        repository.setRuleActive(ruleId, true)
+
+                        val activeRules = repository.getActiveRulesOnce()
+                        val activePackages = activeRules.flatMap { it.blockedPackages }.distinct()
+                        VpnResilienceScheduler.ensureHealthMonitor(context)
+                        vpnController.startVpn(activePackages)
+
+                        if (rule.ruleType == RuleType.SCHEDULED) {
+                            RuleScheduler.scheduleRule(context, rule.copy(isActive = true))
+                        }
+                    }
+
+                    ACTION_STOP -> {
+                        val rule = repository.getRuleById(ruleId)
+                        repository.setRuleActive(ruleId, false)
+                        repository.setTimerStartedAt(ruleId, null)
+
+                        val remainingRules = repository.getActiveRulesOnce()
+                        if (remainingRules.isEmpty()) {
+                            VpnResilienceScheduler.cancelHealthMonitor(context)
+                            vpnController.stopVpn()
+                        } else {
+                            val remainingPackages = remainingRules.flatMap { it.blockedPackages }.distinct()
+                            VpnResilienceScheduler.ensureHealthMonitor(context)
+                            vpnController.startVpn(remainingPackages)
+                        }
+
+                        if (rule?.ruleType == RuleType.SCHEDULED) {
+                            RuleScheduler.scheduleRule(context, rule.copy(isActive = false))
+                        }
+                    }
                 }
-            }
-            ACTION_STOP -> {
-                androidx.work.OneTimeWorkRequest.Builder(
-                    com.beoffline.app.scheduler.StopRuleWorker::class.java
-                ).setInputData(
-                    androidx.work.workDataOf(
-                        com.beoffline.app.scheduler.StopRuleWorker.KEY_RULE_ID to ruleId
-                    )
-                ).build().also {
-                    androidx.work.WorkManager.getInstance(context).enqueue(it)
-                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed handling alarm action=$action ruleId=$ruleId", e)
+            } finally {
+                pendingResult.finish()
             }
         }
     }

@@ -12,10 +12,13 @@ import com.beoffline.app.ui.screens.RuleCreatorScreen
 import com.beoffline.app.ui.screens.RuleCreatorViewModel
 
 sealed class Screen(val route: String) {
-    object Dashboard   : Screen("dashboard")
+    object Dashboard : Screen("dashboard")
     object RuleCreator : Screen("rule_creator?ruleId={ruleId}") {
         fun createRoute(ruleId: Int? = null) =
-            if (ruleId != null) "rule_creator?ruleId=$ruleId" else "rule_creator"
+            buildString {
+                append("rule_creator")
+                if (ruleId != null) append("?ruleId=$ruleId")
+            }
     }
     object AppPicker : Screen("app_picker")
 }
@@ -31,35 +34,33 @@ fun BeOfflineNavGraph(onRequestVpn: (List<String>) -> Unit) {
         composable(Screen.Dashboard.route) {
             DashboardScreen(
                 onCreateRule = { navController.navigate(Screen.RuleCreator.createRoute()) },
-                onEditRule   = { ruleId -> navController.navigate(Screen.RuleCreator.createRoute(ruleId)) },
+                onEditRule = { ruleId -> navController.navigate(Screen.RuleCreator.createRoute(ruleId)) },
                 onRequestVpn = onRequestVpn
             )
         }
 
         composable(Screen.RuleCreator.route) { backStackEntry ->
             val ruleId = backStackEntry.arguments?.getString("ruleId")?.toIntOrNull()
-            // ViewModel scoped to this back stack entry — same instance AppPicker will receive
             val viewModel: RuleCreatorViewModel = hiltViewModel(backStackEntry)
             RuleCreatorScreen(
                 ruleId = ruleId,
                 viewModel = viewModel,
-                onNavigateToAppPicker = { navController.navigate(Screen.AppPicker.route) },
+                onNavigateToAppPicker = {
+                    navController.navigate(Screen.AppPicker.route)
+                },
                 onBack = { navController.popBackStack() }
             )
         }
 
         composable(Screen.AppPicker.route) { entry ->
-            // Get the RuleCreator back stack entry so we can share its ViewModel
             val ruleCreatorEntry = remember(entry) {
                 navController.getBackStackEntry(Screen.RuleCreator.route)
             }
-            // This is the SAME ViewModel instance as RuleCreatorScreen is using
             val ruleCreatorViewModel: RuleCreatorViewModel = hiltViewModel(ruleCreatorEntry)
 
             AppPickerScreen(
                 initiallySelected = ruleCreatorViewModel.uiState.value.selectedPackages,
                 onDone = { selectedPackages ->
-                    // Write directly into the shared ViewModel — no SavedStateHandle needed
                     ruleCreatorViewModel.onPackagesSelected(selectedPackages)
                     navController.popBackStack()
                 }

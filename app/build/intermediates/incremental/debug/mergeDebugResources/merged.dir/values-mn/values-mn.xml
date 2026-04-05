@@ -9,6 +9,7 @@
     <string msgid="59049573811482460" name="call_notification_screening_text">"Ирсэн дуудлагыг харуулж байна"</string>
     <string msgid="406453423630273620" name="close_drawer">"Навигацын цэсийг хаах"</string>
     <string msgid="7573152094250666567" name="close_sheet">"Хүснэгтийг хаах"</string>
+    <string name="common_google_play_services_unknown_issue">%1$s-г Google Play-н үйлчилгээгээр ашиглахад асуудал гарлаа. Дахин оролдоно уу.</string>
     <string msgid="8038256446254964252" name="default_error_message">"Буруу оролт"</string>
     <string msgid="6312721426453364202" name="default_popup_window_title">"Попап цонх"</string>
     <string msgid="1890207353314751437" name="dropdown_menu">"Унадаг цэс"</string>

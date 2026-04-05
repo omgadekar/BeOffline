@@ -9,6 +9,7 @@
     <string msgid="59049573811482460" name="call_notification_screening_text">"Prověřování příchozího hovoru"</string>
     <string msgid="406453423630273620" name="close_drawer">"Zavřít navigační panel"</string>
     <string msgid="7573152094250666567" name="close_sheet">"Zavřít sešit"</string>
+    <string name="common_google_play_services_unknown_issue">Aplikace %1$s má potíže se službami Google Play. Zkuste to prosím znovu.</string>
     <string msgid="8038256446254964252" name="default_error_message">"Neplatný údaj"</string>
     <string msgid="6312721426453364202" name="default_popup_window_title">"Vyskakovací okno"</string>
     <string msgid="1890207353314751437" name="dropdown_menu">"Rozbalovací nabídka"</string>

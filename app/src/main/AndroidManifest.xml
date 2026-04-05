@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ======================================================================
          PERMISSIONS
@@ -8,21 +9,13 @@
     <!-- Core VPN permission — Android will show the system VPN consent dialog -->
     <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
 
-    <!-- Required to enumerate installed packages for the app picker -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission"
-        xmlns:tools="http://schemas.android.com/tools" />
-
     <!-- Scheduling: receive broadcast when device boots to restart active rules -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
-    <!-- WorkManager & exact alarms for schedule enforcement -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Foreground service for the VPN (required Android 14+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
 
     <!-- Needed to read/write VPN state in background -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -34,6 +27,14 @@
 
     <!-- Wake locks to prevent WorkManager tasks from being killed -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Narrow package visibility for the app picker: only launcher apps. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <application
         android:name=".BeOfflineApp"
@@ -67,13 +68,20 @@
             android:exported="false"
             android:label="BeOffline VPN"
             android:permission="android.permission.BIND_VPN_SERVICE"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="systemExempted">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
-            <meta-data
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="VpnTunnel" />
+        </service>
+
+        <service
+            android:name=".notifications.BlockedAppNotificationListenerService"
+            android:exported="false"
+            android:label="BeOffline notification control"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
 
         <!-- ================================================================
@@ -97,14 +105,21 @@
             android:name=".receiver.ScheduleAlarmReceiver"
             android:exported="false" />
 
-        <!-- WorkManager provider (auto-initialized) -->
+        <receiver
+            android:name=".receiver.VpnRecoveryReceiver"
+            android:exported="false" />
+
+        <!-- Remove the default WorkManager initializer because BeOfflineApp provides
+             the configuration and worker factory explicitly. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
-            android:exported="false">
+            android:exported="false"
+            tools:node="merge">
             <meta-data
                 android:name="androidx.work.WorkManagerInitializer"
-                android:value="androidx.startup" />
+                android:value="androidx.startup"
+                tools:node="remove" />
         </provider>
 
     </application>

@@ -1,8 +1,14 @@
 package com.beoffline.app.ui.screens
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,10 +22,50 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.beoffline.app.data.model.AppInfo
 import com.beoffline.app.ui.theme.*
+
+/** Converts any Drawable (including AdaptiveIconDrawable) to an ImageBitmap for Compose */
+private fun Drawable.toImageBitmap(): ImageBitmap {
+    if (this is BitmapDrawable && bitmap != null) return bitmap.asImageBitmap()
+    val width  = intrinsicWidth.takeIf { it > 0 } ?: 48
+    val height = intrinsicHeight.takeIf { it > 0 } ?: 48
+    val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    setBounds(0, 0, canvas.width, canvas.height)
+    draw(canvas)
+    return bmp.asImageBitmap()
+}
+
+@Composable
+private fun AppIcon(drawable: Drawable?, appName: String, modifier: Modifier = Modifier) {
+    val imageBitmap = remember(drawable) { drawable?.toImageBitmap() }
+    if (imageBitmap != null) {
+        Image(
+            bitmap = imageBitmap,
+            contentDescription = appName,
+            contentScale = ContentScale.Fit,
+            modifier = modifier
+        )
+    } else {
+        // Fallback: letter avatar
+        Box(
+            modifier = modifier.background(Brand700, RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = appName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextSecondary
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -110,22 +156,15 @@ private fun AppPickerRow(appInfo: AppInfo, isSelected: Boolean, onToggle: () -> 
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onToggle)
             .background(if (isSelected) AccentPrimary.copy(alpha = 0.12f) else Color.Transparent)
-            .padding(horizontal = 12.dp, vertical = 14.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        // App icon placeholder (gray circle)
-        Box(
+        AppIcon(
+            drawable = appInfo.icon,
+            appName  = appInfo.appName,
             modifier = Modifier
-                .size(40.dp)
+                .size(44.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Brand700),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = appInfo.appName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                style = MaterialTheme.typography.titleMedium,
-                color = TextSecondary
-            )
-        }
+        )
 
         Spacer(Modifier.width(12.dp))
 

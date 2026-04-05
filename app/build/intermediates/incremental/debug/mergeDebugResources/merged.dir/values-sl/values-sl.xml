@@ -9,6 +9,7 @@
     <string msgid="59049573811482460" name="call_notification_screening_text">"Preverjanje dohodnega klica"</string>
     <string msgid="406453423630273620" name="close_drawer">"Zapri meni za krmarjenje"</string>
     <string msgid="7573152094250666567" name="close_sheet">"Zapri list"</string>
+    <string name="common_google_play_services_unknown_issue">Aplikacija %1$s ima težave s storitvami Google Play. Poskusite znova.</string>
     <string msgid="8038256446254964252" name="default_error_message">"Neveljaven vnos"</string>
     <string msgid="6312721426453364202" name="default_popup_window_title">"Pojavno okno"</string>
     <string msgid="1890207353314751437" name="dropdown_menu">"Spustni meni"</string>

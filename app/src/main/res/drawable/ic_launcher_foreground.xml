@@ -1,53 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-
-    <!-- WiFi arc - bottom large arc -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,72 a6,6 0 1,1 0.001,0 Z" />
-
-    <!-- WiFi arc - inner small -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5"
-        android:fillAlpha="0"
-        android:pathData="M40,60 Q54,46 68,60" />
-
-    <!-- WiFi arc - middle -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5"
-        android:fillAlpha="0"
-        android:pathData="M30,50 Q54,28 78,50" />
-
-    <!-- WiFi arc - outer large -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5"
-        android:fillAlpha="0"
-        android:pathData="M20,40 Q54,10 88,40" />
-
-    <!-- Red strike-through line (diagonal) -->
-    <path
-        android:fillColor="#E53935"
-        android:strokeColor="#E53935"
-        android:strokeWidth="7"
-        android:strokeLineCap="round"
-        android:pathData="M28,28 L80,80" />
-
-    <!-- White border on strike line for contrast -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#0A0F1E"
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:pathData="M28,28 L80,80" />
-
-</vector>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="16.5dp"
+    android:insetTop="16.5dp"
+    android:insetRight="16.5dp"
+    android:insetBottom="16.5dp">
+    <bitmap
+        android:gravity="fill"
+        android:src="@drawable/ic_launcher_foreground_art" />
+</inset>
