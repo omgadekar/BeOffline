@@ -21,6 +21,7 @@ import hilt_aggregated_deps._androidx_hilt_work_HiltWrapper_WorkerFactoryModule;
 import hilt_aggregated_deps._com_beoffline_app_BeOfflineApp_GeneratedInjector;
 import hilt_aggregated_deps._com_beoffline_app_MainActivity_GeneratedInjector;
 import hilt_aggregated_deps._com_beoffline_app_di_AppModule;
+import hilt_aggregated_deps._com_beoffline_app_notifications_BlockedAppNotificationListenerService_GeneratedInjector;
 import hilt_aggregated_deps._com_beoffline_app_receiver_BootReceiver_GeneratedInjector;
 import hilt_aggregated_deps._com_beoffline_app_receiver_ScheduleAlarmReceiver_GeneratedInjector;
 import hilt_aggregated_deps._com_beoffline_app_receiver_VpnRecoveryReceiver_GeneratedInjector;
@@ -78,6 +79,7 @@ import hilt_aggregated_deps._dagger_hilt_android_internal_modules_HiltWrapper_Ac
         _com_beoffline_app_BeOfflineApp_GeneratedInjector.class,
         _com_beoffline_app_MainActivity_GeneratedInjector.class,
         _com_beoffline_app_di_AppModule.class,
+        _com_beoffline_app_notifications_BlockedAppNotificationListenerService_GeneratedInjector.class,
         _com_beoffline_app_receiver_BootReceiver_GeneratedInjector.class,
         _com_beoffline_app_receiver_ScheduleAlarmReceiver_GeneratedInjector.class,
         _com_beoffline_app_receiver_VpnRecoveryReceiver_GeneratedInjector.class,

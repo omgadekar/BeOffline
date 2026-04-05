@@ -29,7 +29,8 @@ import javax.inject.Inject
  *
  * We then intentionally do NOTHING with the packets — they enter our tunnel and are
  * silently discarded. To the app (e.g., WhatsApp), the phone appears to have no
- * internet connection at all. Messages are never delivered; notifications never fire.
+ * internet connection at all. Note that some push notifications may still be delivered
+ * by Android system services unless they are separately dismissed by notification access.
  *
  * Meanwhile, every app NOT in our blocked list bypasses the tunnel entirely and
  * continues to use the real network interface normally.

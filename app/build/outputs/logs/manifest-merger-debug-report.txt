@@ -1,6 +1,6 @@
 -- Merging decision tree log ---
 provider#androidx.startup.InitializationProvider
-INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml:111:9-120:20
+INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml:114:9-123:20
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:29:9-37:20
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:29:9-37:20
 MERGED from [androidx.emoji2:emoji2:1.3.0] C:\Users\gadek\.gradle\caches\transforms-4\7388f69075b825638b5772ed3997a697\transformed\emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
@@ -12,19 +12,19 @@ MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gadek\.g
 MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\gadek\.gradle\caches\transforms-4\286d6a71d24376fa0b5038323318750c\transformed\startup-runtime-1.1.1\AndroidManifest.xml:26:9-30:34
 MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\gadek\.gradle\caches\transforms-4\286d6a71d24376fa0b5038323318750c\transformed\startup-runtime-1.1.1\AndroidManifest.xml:26:9-30:34
 	tools:node
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:115:13-31
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:118:13-31
 	android:authorities
 		INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:113:13-68
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:116:13-68
 	android:exported
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:114:13-37
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:117:13-37
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:112:13-67
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:115:13-67
 manifest
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:2:1-124:12
-INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml:2:1-124:12
-INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml:2:1-124:12
-INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml:2:1-124:12
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:2:1-127:12
+INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml:2:1-127:12
+INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml:2:1-127:12
+INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml:2:1-127:12
 MERGED from [androidx.work:work-runtime-ktx:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\251cc05aa422c79b8e9ce4bacdc73090\transformed\work-runtime-ktx-2.9.0\AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.hilt:hilt-work:1.2.0] C:\Users\gadek\.gradle\caches\transforms-4\c81edcbab0beb7317d12e84b74a36939\transformed\hilt-work-1.2.0\AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:17:1-145:12
@@ -138,26 +138,18 @@ uses-permission#android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
 ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:14:5-95
 	android:name
 		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:14:22-92
-uses-permission#android.permission.SCHEDULE_EXACT_ALARM
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:17:5-79
-	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:17:22-76
-uses-permission#android.permission.USE_EXACT_ALARM
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:18:5-74
-	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:18:22-71
 uses-permission#android.permission.FOREGROUND_SERVICE
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:21:5-77
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:17:5-77
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:26:5-77
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:26:5-77
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:21:22-74
-uses-permission#android.permission.FOREGROUND_SERVICE_SPECIAL_USE
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:22:5-89
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:17:22-74
+uses-permission#android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:18:5-93
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:22:22-86
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:18:22-90
 uses-permission#android.permission.INTERNET
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:25:5-67
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:21:5-67
 MERGED from [com.google.firebase:firebase-crashlytics:20.0.3] C:\Users\gadek\.gradle\caches\transforms-4\7a6c57be10c4d853e7a5f702fd22e059\transformed\firebase-crashlytics-20.0.3\AndroidManifest.xml:7:5-67
 MERGED from [com.google.firebase:firebase-crashlytics:20.0.3] C:\Users\gadek\.gradle\caches\transforms-4\7a6c57be10c4d853e7a5f702fd22e059\transformed\firebase-crashlytics-20.0.3\AndroidManifest.xml:7:5-67
 MERGED from [com.google.firebase:firebase-installations:19.0.1] C:\Users\gadek\.gradle\caches\transforms-4\a1aa940d83dea1c26bc87569aa51b281\transformed\firebase-installations-19.0.1\AndroidManifest.xml:8:5-67
@@ -165,13 +157,13 @@ MERGED from [com.google.firebase:firebase-installations:19.0.1] C:\Users\gadek\.
 MERGED from [com.google.android.datatransport:transport-backend-cct:3.3.0] C:\Users\gadek\.gradle\caches\transforms-4\489d7ce0635306773740f3f799c5223a\transformed\transport-backend-cct-3.3.0\AndroidManifest.xml:23:5-67
 MERGED from [com.google.android.datatransport:transport-backend-cct:3.3.0] C:\Users\gadek\.gradle\caches\transforms-4\489d7ce0635306773740f3f799c5223a\transformed\transport-backend-cct-3.3.0\AndroidManifest.xml:23:5-67
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:25:22-64
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:21:22-64
 uses-permission#android.permission.CHANGE_NETWORK_STATE
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:26:5-79
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:22:5-79
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:26:22-76
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:22:22-76
 uses-permission#android.permission.ACCESS_NETWORK_STATE
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:27:5-79
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:23:5-79
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:24:5-79
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:24:5-79
 MERGED from [com.google.firebase:firebase-installations:19.0.1] C:\Users\gadek\.gradle\caches\transforms-4\a1aa940d83dea1c26bc87569aa51b281\transformed\firebase-installations-19.0.1\AndroidManifest.xml:7:5-79
@@ -181,32 +173,32 @@ MERGED from [com.google.android.datatransport:transport-backend-cct:3.3.0] C:\Us
 MERGED from [com.google.android.datatransport:transport-runtime:3.3.0] C:\Users\gadek\.gradle\caches\transforms-4\f1b0300fbf3e62483ecdb0a92d32bfab\transformed\transport-runtime-3.3.0\AndroidManifest.xml:20:5-79
 MERGED from [com.google.android.datatransport:transport-runtime:3.3.0] C:\Users\gadek\.gradle\caches\transforms-4\f1b0300fbf3e62483ecdb0a92d32bfab\transformed\transport-runtime-3.3.0\AndroidManifest.xml:20:5-79
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:27:22-76
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:23:22-76
 uses-permission#android.permission.POST_NOTIFICATIONS
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:30:5-77
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:26:5-77
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:30:22-74
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:26:22-74
 uses-permission#android.permission.WAKE_LOCK
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:33:5-68
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:29:5-68
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:23:5-68
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:23:5-68
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:33:22-65
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:29:22-65
 queries
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:36:5-41:15
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:32:5-37:15
 intent#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:37:9-40:18
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:33:9-36:18
 action#android.intent.action.MAIN
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:38:13-65
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:34:13-65
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:38:21-62
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:34:21-62
 category#android.intent.category.LAUNCHER
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:39:13-73
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:35:13-73
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:39:23-70
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:35:23-70
 application
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:43:5-122:19
-INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml:43:5-122:19
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:39:5-125:19
+INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml:39:5-125:19
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:28:5-143:19
 MERGED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:28:5-143:19
 MERGED from [com.google.firebase:firebase-crashlytics:20.0.3] C:\Users\gadek\.gradle\caches\transforms-4\7a6c57be10c4d853e7a5f702fd22e059\transformed\firebase-crashlytics-20.0.3\AndroidManifest.xml:11:5-22:19
@@ -252,90 +244,100 @@ MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\gadek\.gradle\cach
 	android:appComponentFactory
 		ADDED from [androidx.core:core:1.13.1] C:\Users\gadek\.gradle\caches\transforms-4\3285c7a32de5c6337cb8265e8441d154\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
 	android:supportsRtl
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:49:9-35
-	android:label
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:47:9-41
-	android:roundIcon
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:48:9-48
-	android:icon
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:46:9-43
-	android:allowBackup
 		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:45:9-35
-	android:theme
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:50:9-47
-	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:44:9-37
-activity#com.beoffline.app.MainActivity
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:55:9-63:20
-	android:exported
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:57:13-36
-	android:theme
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:58:13-51
-	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:56:13-41
-intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:59:13-62:29
-service#com.beoffline.app.vpn.BeOfflineVpnService
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:70:9-82:19
 	android:label
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:73:13-42
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:43:9-41
+	android:roundIcon
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:44:9-48
+	android:icon
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:42:9-43
+	android:allowBackup
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:41:9-35
+	android:theme
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:46:9-47
+	android:name
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:40:9-37
+activity#com.beoffline.app.MainActivity
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:51:9-59:20
 	android:exported
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:72:13-37
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:53:13-36
+	android:theme
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:54:13-51
+	android:name
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:52:13-41
+intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:55:13-58:29
+service#com.beoffline.app.vpn.BeOfflineVpnService
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:66:9-75:19
+	android:label
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:69:13-42
+	android:exported
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:68:13-37
 	android:permission
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:74:13-69
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:70:13-69
 	android:foregroundServiceType
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:75:13-55
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:71:13-59
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:71:13-52
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:67:13-52
 intent-filter#action:name:android.net.VpnService
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:76:13-78:29
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:72:13-74:29
 action#android.net.VpnService
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:77:17-65
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:73:17-65
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:77:25-62
-meta-data#android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:79:13-81:45
-	android:value
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:81:17-42
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:73:25-62
+service#com.beoffline.app.notifications.BlockedAppNotificationListenerService
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:77:9-85:19
+	android:label
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:80:13-59
+	android:exported
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:79:13-37
+	android:permission
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:81:13-87
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:80:17-76
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:78:13-80
+intent-filter#action:name:android.service.notification.NotificationListenerService
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:82:13-84:29
+action#android.service.notification.NotificationListenerService
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:83:17-99
+	android:name
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:83:25-96
 receiver#com.beoffline.app.receiver.BootReceiver
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:88:9-95:20
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:91:9-98:20
 	android:exported
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:90:13-36
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:93:13-36
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:89:13-50
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:92:13-50
 intent-filter#action:name:android.intent.action.BOOT_COMPLETED+action:name:android.intent.action.MY_PACKAGE_REPLACED
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:91:13-94:29
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:94:13-97:29
 action#android.intent.action.BOOT_COMPLETED
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:92:17-79
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:95:17-79
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:92:25-76
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:95:25-76
 action#android.intent.action.MY_PACKAGE_REPLACED
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:93:17-84
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:96:17-84
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:93:25-81
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:96:25-81
 receiver#com.beoffline.app.receiver.ScheduleAlarmReceiver
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:101:9-103:40
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:104:9-106:40
 	android:exported
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:103:13-37
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:106:13-37
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:102:13-59
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:105:13-59
 receiver#com.beoffline.app.receiver.VpnRecoveryReceiver
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:105:9-107:40
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:108:9-110:40
 	android:exported
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:107:13-37
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:110:13-37
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:106:13-57
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:109:13-57
 meta-data#androidx.work.WorkManagerInitializer
-ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:116:13-119:39
+ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:119:13-122:39
 REJECTED from [androidx.work:work-runtime:2.9.0] C:\Users\gadek\.gradle\caches\transforms-4\406466ba904ce7dd5c0f8871746e165e\transformed\work-runtime-2.9.0\AndroidManifest.xml:34:13-36:52
 	tools:node
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:119:17-36
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:122:17-36
 	android:value
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:118:17-49
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:121:17-49
 	android:name
-		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:117:17-68
+		ADDED from D:\BeOffline\app\src\main\AndroidManifest.xml:120:17-68
 uses-sdk
 INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from D:\BeOffline\app\src\main\AndroidManifest.xml

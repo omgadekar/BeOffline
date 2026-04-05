@@ -31,6 +31,7 @@ data class DashboardUiState(
     val activeRules: List<BlockRule> = emptyList(),
     val appInfosByRule: Map<Int, List<AppInfo>> = emptyMap(),
     val backgroundProtection: BackgroundProtectionStatus? = null,
+    val isVpnPermissionGranted: Boolean = false,
     val blockedTrafficAlertsEnabled: Boolean = true,
     val showWelcomeDialog: Boolean = false,
     val isLoading: Boolean = false
@@ -152,10 +153,12 @@ class DashboardViewModel @Inject constructor(
 
     fun refreshBackgroundProtection() {
         val status = backgroundProtectionManager.getStatus()
+        val vpnPermissionGranted = vpnController.getVpnPermissionIntent() == null
         _uiState.update {
             it.copy(
                 backgroundProtection = status,
-                showWelcomeDialog = !status.needsAttention && !hasSeenWelcomeDialog()
+                isVpnPermissionGranted = vpnPermissionGranted,
+                showWelcomeDialog = !hasSeenWelcomeDialog()
             )
         }
     }
@@ -174,6 +177,10 @@ class DashboardViewModel @Inject constructor(
 
     fun openNotificationSettings() {
         backgroundProtectionManager.openNotificationSettings()
+    }
+
+    fun openNotificationAccessSettings() {
+        backgroundProtectionManager.openNotificationAccessSettings()
     }
 
     fun dismissWelcomeDialog() {

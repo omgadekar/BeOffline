@@ -18,6 +18,8 @@ import com.beoffline.app.data.local.BlockRuleDao;
 import com.beoffline.app.data.repository.BlockRuleRepository;
 import com.beoffline.app.di.AppModule_ProvideBlockRuleDaoFactory;
 import com.beoffline.app.di.AppModule_ProvideDatabaseFactory;
+import com.beoffline.app.notifications.BlockedAppNotificationListenerService;
+import com.beoffline.app.notifications.BlockedAppNotificationListenerService_MembersInjector;
 import com.beoffline.app.receiver.BootReceiver;
 import com.beoffline.app.receiver.BootReceiver_MembersInjector;
 import com.beoffline.app.receiver.ScheduleAlarmReceiver;
@@ -434,18 +436,18 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
     private static final class LazyClassKeyProvider {
       static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
 
-      static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
-
       static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
+
+      static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
 
       @KeepFieldType
       RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
 
       @KeepFieldType
-      DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
+      AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
 
       @KeepFieldType
-      AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
+      DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
     }
   }
 
@@ -496,18 +498,18 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
     private static final class LazyClassKeyProvider {
       static String com_beoffline_app_ui_screens_DashboardViewModel = "com.beoffline.app.ui.screens.DashboardViewModel";
 
-      static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
-
       static String com_beoffline_app_ui_screens_RuleCreatorViewModel = "com.beoffline.app.ui.screens.RuleCreatorViewModel";
+
+      static String com_beoffline_app_ui_screens_AppPickerViewModel = "com.beoffline.app.ui.screens.AppPickerViewModel";
 
       @KeepFieldType
       DashboardViewModel com_beoffline_app_ui_screens_DashboardViewModel2;
 
       @KeepFieldType
-      AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
+      RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
 
       @KeepFieldType
-      RuleCreatorViewModel com_beoffline_app_ui_screens_RuleCreatorViewModel2;
+      AppPickerViewModel com_beoffline_app_ui_screens_AppPickerViewModel2;
     }
 
     private static final class SwitchingProvider<T> implements Provider<T> {
@@ -615,16 +617,29 @@ public final class DaggerBeOfflineApp_HiltComponents_SingletonC {
     }
 
     @Override
+    public void injectBlockedAppNotificationListenerService(
+        BlockedAppNotificationListenerService blockedAppNotificationListenerService) {
+      injectBlockedAppNotificationListenerService2(blockedAppNotificationListenerService);
+    }
+
+    @Override
     public void injectBeOfflineVpnService(BeOfflineVpnService beOfflineVpnService) {
       injectBeOfflineVpnService2(beOfflineVpnService);
     }
 
     @CanIgnoreReturnValue
-    private BeOfflineVpnService injectBeOfflineVpnService2(BeOfflineVpnService instance) {
-      BeOfflineVpnService_MembersInjector.injectVpnStateManager(instance, singletonCImpl.vpnStateManagerProvider.get());
-      BeOfflineVpnService_MembersInjector.injectRepository(instance, singletonCImpl.blockRuleRepositoryProvider.get());
-      BeOfflineVpnService_MembersInjector.injectBlockedTrafficAlertManager(instance, singletonCImpl.blockedTrafficAlertManagerProvider.get());
+    private BlockedAppNotificationListenerService injectBlockedAppNotificationListenerService2(
+        BlockedAppNotificationListenerService instance) {
+      BlockedAppNotificationListenerService_MembersInjector.injectRepository(instance, singletonCImpl.blockRuleRepositoryProvider.get());
       return instance;
+    }
+
+    @CanIgnoreReturnValue
+    private BeOfflineVpnService injectBeOfflineVpnService2(BeOfflineVpnService instance2) {
+      BeOfflineVpnService_MembersInjector.injectVpnStateManager(instance2, singletonCImpl.vpnStateManagerProvider.get());
+      BeOfflineVpnService_MembersInjector.injectRepository(instance2, singletonCImpl.blockRuleRepositoryProvider.get());
+      BeOfflineVpnService_MembersInjector.injectBlockedTrafficAlertManager(instance2, singletonCImpl.blockedTrafficAlertManagerProvider.get());
+      return instance2;
     }
   }
 

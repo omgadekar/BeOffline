@@ -2,6 +2,7 @@ package com.beoffline.app;
 
 import androidx.hilt.work.HiltWrapper_WorkerFactoryModule;
 import com.beoffline.app.di.AppModule;
+import com.beoffline.app.notifications.BlockedAppNotificationListenerService_GeneratedInjector;
 import com.beoffline.app.receiver.BootReceiver_GeneratedInjector;
 import com.beoffline.app.receiver.ScheduleAlarmReceiver_GeneratedInjector;
 import com.beoffline.app.receiver.VpnRecoveryReceiver_GeneratedInjector;
@@ -161,7 +162,8 @@ public final class BeOfflineApp_HiltComponents {
 
   @Subcomponent
   @ServiceScoped
-  public abstract static class ServiceC implements BeOfflineVpnService_GeneratedInjector,
+  public abstract static class ServiceC implements BlockedAppNotificationListenerService_GeneratedInjector,
+      BeOfflineVpnService_GeneratedInjector,
       ServiceComponent,
       GeneratedComponent {
     @Subcomponent.Builder

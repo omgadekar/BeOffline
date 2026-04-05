@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -61,7 +63,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -149,17 +153,25 @@ fun RuleCreatorScreen(
             )
         },
         bottomBar = {
-            Button(
-                onClick = { viewModel.saveRule(onSaved = onBack) },
-                enabled = uiState.isValid,
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .padding(16.dp)
-                    .height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
             ) {
-                Text("Save Rule", style = MaterialTheme.typography.labelLarge)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = { viewModel.saveRule(onSaved = onBack) },
+                        enabled = uiState.isValid,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                    ) {
+                        Text("Save Rule", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
             }
         }
     ) { padding ->
@@ -171,7 +183,11 @@ fun RuleCreatorScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SectionCard(title = "Rule Name") {
+            SectionCard(
+                title = "Rule Name",
+                highlighted = false,
+                dimmed = false
+            ) {
                 OutlinedTextField(
                     value = uiState.name,
                     onValueChange = viewModel::onNameChange,
@@ -190,7 +206,11 @@ fun RuleCreatorScreen(
                 )
             }
 
-            SectionCard(title = "Apps to Block") {
+            SectionCard(
+                title = "Apps to Block",
+                highlighted = false,
+                dimmed = false
+            ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -232,7 +252,11 @@ fun RuleCreatorScreen(
                 }
             }
 
-            SectionCard(title = "Block Type") {
+            SectionCard(
+                title = "Block Type",
+                highlighted = false,
+                dimmed = false
+            ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     RuleType.values().forEach { type ->
                         RuleTypeOption(
@@ -571,12 +595,23 @@ private fun TimePickerDialogField(
 }
 
 @Composable
-private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun SectionCard(
+    title: String,
+    highlighted: Boolean = false,
+    dimmed: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.alpha(if (dimmed) 0.35f else 1f)
+    ) {
         Text(title, style = MaterialTheme.typography.labelLarge, color = TextSecondary)
         Card(
             shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = Brand800)
+            colors = CardDefaults.cardColors(
+                containerColor = if (highlighted) Brand700 else Brand800
+            ),
+            border = if (highlighted) BorderStroke(2.dp, AccentSecondary.copy(alpha = 0.9f)) else null
         ) {
             Column(modifier = Modifier.padding(16.dp), content = content)
         }

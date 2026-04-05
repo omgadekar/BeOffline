@@ -22,6 +22,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -65,13 +67,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -243,7 +248,24 @@ fun DashboardScreen(
     }
 
     when {
-        uiState.backgroundProtection?.needsAttention == true -> {
+        uiState.showWelcomeDialog -> {
+            SetupBeOfflineDialog(
+                status = uiState.backgroundProtection,
+                isVpnPermissionGranted = uiState.isVpnPermissionGranted,
+                onBatteryClick = viewModel::openBatteryOptimizationSettings,
+                onNotificationClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        viewModel.openNotificationSettings()
+                    }
+                },
+                onNotificationAccessClick = viewModel::openNotificationAccessSettings,
+                onVpnClick = { onRequestVpn(emptyList()) },
+                onContinue = viewModel::dismissWelcomeDialog
+            )
+        }
+        uiState.activeRules.isNotEmpty() && uiState.backgroundProtection?.needsAttention == true -> {
             BackgroundProtectionDialog(
                 status = uiState.backgroundProtection,
                 onBatteryClick = viewModel::openBatteryOptimizationSettings,
@@ -255,9 +277,6 @@ fun DashboardScreen(
                     }
                 }
             )
-        }
-        uiState.showWelcomeDialog -> {
-            WelcomeDialog(onContinue = viewModel::dismissWelcomeDialog)
         }
     }
 
@@ -287,6 +306,15 @@ fun DashboardScreen(
     if (showIssueSubmittedDialog) {
         IssueSubmittedDialog(onDismiss = { showIssueSubmittedDialog = false })
     }
+}
+
+private fun isSetupComplete(
+    status: BackgroundProtectionStatus?,
+    isVpnPermissionGranted: Boolean
+): Boolean {
+    return status?.batteryOptimizationIgnored == true &&
+        status.notificationsEnabled &&
+        isVpnPermissionGranted
 }
 
 @Composable
@@ -800,123 +828,314 @@ private fun IssueSubmittedDialog(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun WelcomeDialog(onContinue: () -> Unit) {
+private fun WelcomeSetupDialog(
+    status: BackgroundProtectionStatus?,
+    isVpnPermissionGranted: Boolean,
+    onBatteryClick: () -> Unit,
+    onNotificationClick: () -> Unit,
+    onVpnClick: () -> Unit
+) {
     val scrollState = rememberScrollState()
 
     Dialog(onDismissRequest = {}) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(30.dp))
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color(0xFF20264B), Brand800, Color(0xFF11152A))
-                    )
-                )
-                .border(
-                    width = 1.dp,
-                    color = AccentSecondary.copy(alpha = 0.28f),
-                    shape = RoundedCornerShape(30.dp)
-                )
-        ) {
+        BoxWithConstraints {
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size(150.dp)
-                    .clip(CircleShape)
-                    .background(AccentPrimary.copy(alpha = 0.10f))
-            )
-
-            Column(
-                modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                    .heightIn(max = maxHeight * 0.9f)
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color(0xFF20264B), Brand800, Color(0xFF11152A))
+                        )
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = AccentSecondary.copy(alpha = 0.28f),
+                        shape = RoundedCornerShape(30.dp)
+                    )
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(AccentPrimary, AccentSecondary)
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PhoneDisabled,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(AccentPrimary.copy(alpha = 0.16f))
-                                .padding(horizontal = 10.dp, vertical = 5.dp)
-                        ) {
-                            Text(
-                                text = "Welcome to BeOffline",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AccentSecondary
-                            )
-                        }
-                        Text(
-                            text = "Go Truly Offline",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = TextPrimary
-                        )
-                    }
-                }
-
-                Text(
-                    text = "Cut the internet for any app so you can focus without fake availability.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(150.dp)
+                        .clip(CircleShape)
+                        .background(AccentPrimary.copy(alpha = 0.10f))
                 )
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 352.dp)
-                        .verticalScroll(scrollState),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(24.dp)
                 ) {
-                    WelcomeFeatureCard(
-                        title = "Take your space back",
-                        body = "That one person whose message instantly kills your mood? Their texts can wait. Not forever - just until you're ready."
-                    )
-                    WelcomeFeatureCard(
-                        title = "Silence that actually sticks",
-                        body = "Tired of WhatsApp interrupting your focus? Block any app from the internet entirely - not just the notifications. Messages stop arriving, senders see a single gray tick, and you stay genuinely unreachable."
-                    )
-                    WelcomeFeatureCard(
-                        title = "Use apps without reopening the floodgates",
-                        body = "Your apps still work, just offline. Open WhatsApp to send a voice note, use Instagram to post - without your inbox flooding the moment you do."
-                    )
-                    WelcomeFeatureCard(
-                        title = "Your rules, your timing",
-                        body = "Any app. Any schedule. Your rules. Set a timer, pick a time slot, or block instantly. You decide who reaches you and when."
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(scrollState),
+                        verticalArrangement = Arrangement.spacedBy(18.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(AccentPrimary, AccentSecondary)
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.PhoneDisabled,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(AccentPrimary.copy(alpha = 0.16f))
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                ) {
+                                    Text(
+                                        text = "Welcome to BeOffline",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = AccentSecondary
+                                    )
+                                }
+                                Text(
+                                    text = "Go Truly Offline",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = TextPrimary
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "Give BeOffline the access it needs so your rules work reliably from the start.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = TextSecondary
+                        )
+
+                        Text(
+                            text = "Quick setup",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary
+                        )
+
+                        status?.let {
+                            PermissionRequirementCard(
+                                title = "Battery optimization",
+                                description = "Helps BeOffline keep your rules active instead of being put to sleep in the background.",
+                                ok = it.batteryOptimizationIgnored
+                            )
+                            PermissionRequirementCard(
+                                title = "Notifications",
+                                description = "Lets BeOffline show its ongoing status while it keeps selected apps offline.",
+                                ok = it.notificationsEnabled
+                            )
+                        }
+
+                        PermissionRequirementCard(
+                            title = "VPN access",
+                            description = "Required so Android lets BeOffline create the local VPN tunnel used to block internet for the apps you choose.",
+                            ok = isVpnPermissionGranted
+                        )
+
+                        if (status?.batteryOptimizationIgnored == false) {
+                            Button(
+                                onClick = onBatteryClick,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Brand700)
+                            ) {
+                                Text("Allow Background Activity", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                            }
+                        }
+
+                        if (status?.notificationsEnabled == false) {
+                            Button(
+                                onClick = onNotificationClick,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Brand700)
+                            ) {
+                                Text("Allow Notifications", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                            }
+                        }
+
+                        if (!isVpnPermissionGranted) {
+                            Button(
+                                onClick = onVpnClick,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Brand700)
+                            ) {
+                                Text("Allow VPN Access", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = if (isSetupComplete(status, isVpnPermissionGranted)) {
+                            "Great. One moment while we get BeOffline ready."
+                        } else {
+                            "Complete all three permissions to continue."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
+            }
+        }
+    }
+}
 
-                Button(
-                    onClick = onContinue,
+@Composable
+private fun WelcomeJourneyDialog(
+    onStartTour: () -> Unit,
+    onSkip: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+
+    Dialog(onDismissRequest = {}) {
+        BoxWithConstraints {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeight * 0.9f)
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color(0xFF20264B), Brand800, Color(0xFF11152A))
+                        )
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = AccentSecondary.copy(alpha = 0.28f),
+                        shape = RoundedCornerShape(30.dp)
+                    )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(150.dp)
+                        .clip(CircleShape)
+                        .background(AccentPrimary.copy(alpha = 0.10f))
+                )
+
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                        .padding(24.dp)
                 ) {
-                    Text("Let's Go Offline", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(scrollState),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(AccentPrimary, AccentSecondary)
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.PhoneDisabled,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(AccentPrimary.copy(alpha = 0.16f))
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                ) {
+                                    Text(
+                                        text = "Your first rule",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = AccentSecondary
+                                    )
+                                }
+                                Text(
+                                    text = "Here’s what BeOffline does",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = TextPrimary
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "Create one rule and you’ll immediately see how selective offline mode works.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = TextSecondary
+                        )
+
+                        WelcomeFeatureCard(
+                            title = "Take your space back",
+                            body = "That one person whose message instantly kills your mood? Their texts can wait. Not forever - just until you're ready."
+                        )
+                        WelcomeFeatureCard(
+                            title = "Silence that actually sticks",
+                            body = "Block any app from the internet entirely, not just the notification. Messages stop arriving and you stay genuinely unreachable."
+                        )
+                        WelcomeFeatureCard(
+                            title = "Use apps without reopening the floodgates",
+                            body = "Your apps still open normally, just offline. You decide when the internet comes back."
+                        )
+                        WelcomeFeatureCard(
+                            title = "Your rules, your timing",
+                            body = "Set a timer, pick a time slot, or block instantly. You decide who reaches you and when."
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    Button(
+                        onClick = onStartTour,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                    ) {
+                        Text("Start Guided Tour", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                    }
+
+                    TextButton(
+                        onClick = onSkip,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Skip for now", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+                    }
                 }
             }
         }
@@ -957,6 +1176,356 @@ private fun WelcomeFeatureCard(title: String, body: String) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary
             )
+        }
+    }
+}
+
+@Composable
+private fun SetupBeOfflineDialog(
+    status: BackgroundProtectionStatus?,
+    isVpnPermissionGranted: Boolean,
+    onBatteryClick: () -> Unit,
+    onNotificationClick: () -> Unit,
+    onNotificationAccessClick: () -> Unit,
+    onVpnClick: () -> Unit,
+    onContinue: () -> Unit
+) {
+    val requiredSetupComplete = isSetupComplete(status, isVpnPermissionGranted)
+    val nextAction = remember(status, isVpnPermissionGranted) {
+        when {
+            status?.batteryOptimizationIgnored == false -> SetupPrimaryAction(
+                label = "Allow Background Activity",
+                onClick = onBatteryClick
+            )
+            status?.notificationsEnabled == false -> SetupPrimaryAction(
+                label = "Allow Notifications",
+                onClick = onNotificationClick
+            )
+            !isVpnPermissionGranted -> SetupPrimaryAction(
+                label = "Allow VPN Access",
+                onClick = onVpnClick
+            )
+            status?.notificationAccessEnabled == false -> SetupPrimaryAction(
+                label = "Hide Blocked-App Notifications",
+                onClick = onNotificationAccessClick
+            )
+            else -> null
+        }
+    }
+    val scrollState = rememberScrollState()
+
+    Dialog(onDismissRequest = {}) {
+        BoxWithConstraints {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeight * 0.9f)
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color(0xFF20264B), Brand800, Color(0xFF11152A))
+                        )
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = AccentSecondary.copy(alpha = 0.28f),
+                        shape = RoundedCornerShape(30.dp)
+                    )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(150.dp)
+                        .clip(CircleShape)
+                        .background(AccentPrimary.copy(alpha = 0.10f))
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    Text("Quick setup", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+
+                    status?.let {
+                        PermissionRequirementCard(
+                            title = "Battery optimization",
+                            description = "Keeps BeOffline running in the background.",
+                            ok = it.batteryOptimizationIgnored
+                        )
+                        PermissionRequirementCard(
+                            title = "Notifications",
+                            description = "Shows BeOffline status and offline alerts.",
+                            ok = it.notificationsEnabled
+                        )
+                        PermissionRequirementCard(
+                            title = "VPN access",
+                            description = "Lets BeOffline block internet for selected apps.",
+                            ok = isVpnPermissionGranted
+                        )
+                        PermissionRequirementCard(
+                            title = "Hide blocked-app notifications",
+                            description = "Dismisses notifications from blocked apps.",
+                            ok = it.notificationAccessEnabled,
+                            okLabel = "Enabled",
+                            missingLabel = "Optional",
+                            missingColor = AccentSecondary
+                        )
+                    }
+
+                    nextAction?.let { action ->
+                        Button(
+                            onClick = action.onClick,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Brand700)
+                        ) {
+                            Text(action.label, style = MaterialTheme.typography.labelLarge, color = Color.White)
+                        }
+                    }
+
+                    Text(
+                        text = if (requiredSetupComplete) {
+                            "Required setup is complete. Notification hiding is optional."
+                        } else {
+                            "Complete the 3 required permissions to continue."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+
+                    Button(
+                        onClick = onContinue,
+                        enabled = requiredSetupComplete,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentPrimary,
+                            disabledContainerColor = Brand700
+                        )
+                    ) {
+                        Text("Continue", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class SetupPrimaryAction(
+    val label: String,
+    val onClick: () -> Unit
+)
+
+@Composable
+private fun GettingStartedDialog(
+    onStart: () -> Unit,
+    onSkip: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+
+    Dialog(onDismissRequest = {}) {
+        BoxWithConstraints {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeight * 0.9f)
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color(0xFF20264B), Brand800, Color(0xFF11152A))
+                        )
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = AccentSecondary.copy(alpha = 0.28f),
+                        shape = RoundedCornerShape(30.dp)
+                    )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(150.dp)
+                        .clip(CircleShape)
+                        .background(AccentPrimary.copy(alpha = 0.10f))
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(scrollState),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(AccentPrimary.copy(alpha = 0.16f))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "Let's set up BeOffline",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AccentSecondary
+                            )
+                        }
+
+                        Text(
+                            text = "Let's get started",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = TextPrimary
+                        )
+
+                        Text(
+                            text = "Create one rule and you'll immediately see how selective offline mode works.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = TextSecondary
+                        )
+
+                        WelcomeFeatureCard(
+                            title = "Take your space back",
+                            body = "That one person whose message instantly kills your mood? Their texts can wait. Not forever - just until you're ready."
+                        )
+                        WelcomeFeatureCard(
+                            title = "Silence that actually sticks",
+                            body = "Block any app from the internet entirely, not just the notification. Messages stop arriving and you stay genuinely unreachable."
+                        )
+                        WelcomeFeatureCard(
+                            title = "Use apps without reopening the floodgates",
+                            body = "Your apps still open normally, just offline. You decide when the internet comes back."
+                        )
+                        WelcomeFeatureCard(
+                            title = "Your rules, your timing",
+                            body = "Set a timer, pick a time slot, or block instantly. You decide who reaches you and when."
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    Button(
+                        onClick = onStart,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                    ) {
+                        Text("Let's Get Started", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                    }
+
+                    TextButton(
+                        onClick = onSkip,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Skip for now", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardCoachmarkOverlay(
+    onStart: () -> Unit,
+    onSkip: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Card(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 18.dp, bottom = 102.dp)
+                .widthIn(max = 258.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Brand800),
+            border = BorderStroke(1.dp, AccentSecondary.copy(alpha = 0.35f))
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Step 1 of 4", style = MaterialTheme.typography.labelMedium, color = AccentSecondary)
+                Text("Start with New Rule", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                Text(
+                    text = "Tap the highlighted button to create your first rule. We'll walk through the next screens together.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+                Button(
+                    onClick = onStart,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                ) {
+                    Text("Open New Rule", color = Color.White)
+                }
+                TextButton(
+                    onClick = onSkip,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Skip for now", color = TextSecondary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardGuideOverlay(
+    onStart: () -> Unit,
+    onSkip: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.35f))
+    ) {
+        Card(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(horizontal = 16.dp, vertical = 96.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Brand800),
+            border = BorderStroke(1.dp, AccentSecondary.copy(alpha = 0.35f))
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Step 1 of 4", style = MaterialTheme.typography.labelMedium, color = AccentSecondary)
+                Text("Start with New Rule", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                Text(
+                    text = "Tap the highlighted button to create your first rule. I’ll guide you through the next screens too.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+                Button(
+                    onClick = onStart,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                ) {
+                    Text("Open New Rule", color = Color.White)
+                }
+                TextButton(
+                    onClick = onSkip,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Skip tour", color = TextSecondary)
+                }
+            }
         }
     }
 }
@@ -1093,10 +1662,14 @@ private fun BackgroundProtectionDialog(
 private fun PermissionRequirementCard(
     title: String,
     description: String,
-    ok: Boolean
+    ok: Boolean,
+    okLabel: String = "Allowed",
+    missingLabel: String = "Required",
+    missingColor: Color = StatusDanger,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .background(Color.White.copy(alpha = 0.04f))
@@ -1105,7 +1678,7 @@ private fun PermissionRequirementCard(
                 color = Color.White.copy(alpha = 0.06f),
                 shape = RoundedCornerShape(20.dp)
             )
-            .padding(16.dp)
+            .padding(horizontal = 14.dp, vertical = 14.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
@@ -1116,18 +1689,32 @@ private fun PermissionRequirementCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1
                 )
-                Text(
-                    text = if (ok) "Allowed" else "Required",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (ok) StatusActive else StatusDanger
-                )
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(
+                            if (ok) StatusActive.copy(alpha = 0.14f) else missingColor.copy(alpha = 0.14f)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = if (ok) okLabel else missingLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (ok) StatusActive else missingColor,
+                        maxLines = 1
+                    )
+                }
             }
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
+                color = TextSecondary,
+                maxLines = 2
             )
         }
     }

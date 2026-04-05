@@ -10,8 +10,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.content.ComponentName
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.beoffline.app.notifications.BlockedAppNotificationListenerService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,6 +21,7 @@ import javax.inject.Singleton
 data class BackgroundProtectionStatus(
     val batteryOptimizationIgnored: Boolean,
     val notificationsEnabled: Boolean,
+    val notificationAccessEnabled: Boolean,
     val exactAlarmAllowed: Boolean,
     val manufacturer: String,
     val manufacturerInstructions: List<String>
@@ -36,6 +39,7 @@ class BackgroundProtectionManager @Inject constructor(
         return BackgroundProtectionStatus(
             batteryOptimizationIgnored = isIgnoringBatteryOptimizations(),
             notificationsEnabled = areNotificationsEnabled(),
+            notificationAccessEnabled = isNotificationAccessEnabled(),
             exactAlarmAllowed = canScheduleExactAlarms(),
             manufacturer = Build.MANUFACTURER.orEmpty().replaceFirstChar { it.uppercase() },
             manufacturerInstructions = manufacturerInstructions()
@@ -81,6 +85,18 @@ class BackgroundProtectionManager @Inject constructor(
         tryStart(primaryIntent, fallbackIntent)
     }
 
+    fun openNotificationAccessSettings() {
+        val componentName = ComponentName(context, BlockedAppNotificationListenerService::class.java)
+        val detailIntent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
+            putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, componentName.flattenToString())
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val fallbackIntent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        tryStart(detailIntent, fallbackIntent)
+    }
+
     fun openAppDetailsSettings() {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -111,6 +127,10 @@ class BackgroundProtectionManager @Inject constructor(
             Manifest.permission.POST_NOTIFICATIONS
         ) == PackageManager.PERMISSION_GRANTED
         return notificationsEnabled && permissionGranted
+    }
+
+    private fun isNotificationAccessEnabled(): Boolean {
+        return NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
     }
 
     private fun manufacturerInstructions(): List<String> {
