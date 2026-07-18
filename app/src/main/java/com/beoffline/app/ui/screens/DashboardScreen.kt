@@ -43,8 +43,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.PhoneDisabled
 import androidx.compose.material3.AlertDialog
@@ -147,6 +149,7 @@ fun DashboardScreen(
     onCreateRule: () -> Unit,
     onEditRule: (Int) -> Unit,
     onRequestVpn: (List<String>) -> Unit,
+    onOpenAppLock: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -200,6 +203,10 @@ fun DashboardScreen(
 
             item {
                 StatusCard(isVpnRunning = uiState.isVpnRunning, activeCount = uiState.activeRules.size)
+            }
+
+            item {
+                AppLockEntryCard(onClick = onOpenAppLock)
             }
 
             item {
@@ -1856,4 +1863,42 @@ private fun RuleType.label() = when (this) {
     RuleType.PERMANENT -> "Always on"
     RuleType.SCHEDULED -> "Scheduled"
     RuleType.TIMER -> "Timer"
+}
+
+/** Entry point to the App Lock (open-block) feature area — a separate feature from internet blocking. */
+@Composable
+private fun AppLockEntryCard(onClick: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Brand800),
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Lock,
+                contentDescription = null,
+                tint = AccentPrimary,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("App Lock", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                Text(
+                    text = "Stop selected apps from being opened at all",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+            }
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = TextSecondary
+            )
+        }
+    }
 }

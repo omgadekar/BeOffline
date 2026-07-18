@@ -14,6 +14,7 @@ import android.content.ComponentName
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.beoffline.app.notifications.BlockedAppNotificationListenerService
+import com.beoffline.app.openblock.OpenBlockAccessibilityService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,6 +24,8 @@ data class BackgroundProtectionStatus(
     val notificationsEnabled: Boolean,
     val notificationAccessEnabled: Boolean,
     val exactAlarmAllowed: Boolean,
+    val overlayAllowed: Boolean,
+    val accessibilityEnabled: Boolean,
     val manufacturer: String,
     val manufacturerInstructions: List<String>
 ) {
@@ -41,6 +44,8 @@ class BackgroundProtectionManager @Inject constructor(
             notificationsEnabled = areNotificationsEnabled(),
             notificationAccessEnabled = isNotificationAccessEnabled(),
             exactAlarmAllowed = canScheduleExactAlarms(),
+            overlayAllowed = canDrawOverlays(),
+            accessibilityEnabled = isAccessibilityServiceEnabled(),
             manufacturer = Build.MANUFACTURER.orEmpty().replaceFirstChar { it.uppercase() },
             manufacturerInstructions = manufacturerInstructions()
         )
@@ -97,6 +102,29 @@ class BackgroundProtectionManager @Inject constructor(
         tryStart(detailIntent, fallbackIntent)
     }
 
+    /** Open-block engine: "Display over other apps" permission for the block overlay. */
+    fun openOverlayPermissionSettings() {
+        val packageUri = Uri.parse("package:${context.packageName}")
+        val requestIntent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, packageUri)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        tryStart(requestIntent, fallbackIntent)
+    }
+
+    /**
+     * Open-block engine: system Accessibility settings, where the user enables
+     * the BeOffline app-block service. Only navigate here AFTER the in-app
+     * prominent disclosure has been accepted (Play policy).
+     */
+    fun openAccessibilitySettings() {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        tryStart(intent)
+    }
+
     fun openAppDetailsSettings() {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -131,6 +159,24 @@ class BackgroundProtectionManager @Inject constructor(
 
     private fun isNotificationAccessEnabled(): Boolean {
         return NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+    }
+
+    fun canDrawOverlays(): Boolean = Settings.canDrawOverlays(context)
+
+    /**
+     * True when the open-block accessibility service is enabled in system
+     * Accessibility settings. Read from Secure settings — robust to the user
+     * (or Android 17 Advanced Protection Mode) revoking it at any time.
+     */
+    fun isAccessibilityServiceEnabled(): Boolean {
+        val expected = ComponentName(context, OpenBlockAccessibilityService::class.java)
+        val enabledServices = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabledServices.split(':').any { entry ->
+            ComponentName.unflattenFromString(entry) == expected
+        }
     }
 
     private fun manufacturerInstructions(): List<String> {

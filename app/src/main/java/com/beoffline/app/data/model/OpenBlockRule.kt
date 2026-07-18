@@ -6,29 +6,35 @@ import androidx.room.TypeConverters
 import com.beoffline.app.data.local.Converters
 
 /**
- * BlockRule — represents a user-configured "offline rule" for one or more apps.
+ * OpenBlockRule — represents a user-configured "can't open" rule for one or more apps.
  *
- * A rule can be either:
- *   - PERMANENT: Block immediately and stay blocked until manually turned off.
- *   - SCHEDULED: Block apps only during a specific time window (e.g., 9 AM–12 PM, Mon-Fri).
- *   - TIMER:     Block for a fixed duration from now (e.g., "focus for 45 minutes").
+ * This is the OPEN-BLOCKING engine's rule type: during an active rule, the
+ * selected apps cannot be *opened* at all (foreground detection + block screen),
+ * as opposed to [BlockRule] which only cuts their *internet* via the VPN.
+ *
+ * The two features are deliberately independent — separate tables, separate
+ * rules, separate UI — and must never conflict. They share only the
+ * [ScheduledWindow] evaluation logic and the [RuleType] vocabulary:
+ *   - PERMANENT: Block opening immediately until manually turned off.
+ *   - SCHEDULED: Block opening only during a time window (e.g., 10 PM–7 AM).
+ *   - TIMER:     Block opening for a fixed duration from now.
  */
-@Entity(tableName = "block_rules")
+@Entity(tableName = "open_block_rules")
 @TypeConverters(Converters::class)
-data class BlockRule(
+data class OpenBlockRule(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
 
-    /** Human-readable name for the rule, e.g., "Morning Focus" */
+    /** Human-readable name for the rule, e.g., "Deep Work" */
     val name: String,
 
-    /** List of Android package names to block. e.g., ["com.whatsapp", "com.instagram.android"] */
+    /** List of Android package names that cannot be opened while the rule is active. */
     val blockedPackages: List<String>,
 
     /** The type of this rule */
     val ruleType: RuleType,
 
-    /** Is this rule currently enforced (VPN active for it) */
+    /** Is this rule currently enforced (open-block engine active for it) */
     val isActive: Boolean = false,
 
     // ── Scheduled rule fields (ScheduledWindow) ────────────────────────────
@@ -53,9 +59,3 @@ data class BlockRule(
     /** Epoch millis when this rule was created */
     val createdAt: Long = System.currentTimeMillis()
 ) : ScheduledWindow
-
-enum class RuleType {
-    PERMANENT,   // Block indefinitely until user manually stops
-    SCHEDULED,   // Block on a recurring time schedule
-    TIMER        // Block for a fixed duration
-}

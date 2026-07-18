@@ -6,8 +6,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.beoffline.app.ui.screens.AccessibilityDisclosureScreen
 import com.beoffline.app.ui.screens.AppPickerScreen
 import com.beoffline.app.ui.screens.DashboardScreen
+import com.beoffline.app.ui.screens.OpenBlockRuleCreatorScreen
+import com.beoffline.app.ui.screens.OpenBlockRuleCreatorViewModel
+import com.beoffline.app.ui.screens.OpenBlockScreen
 import com.beoffline.app.ui.screens.RuleCreatorScreen
 import com.beoffline.app.ui.screens.RuleCreatorViewModel
 
@@ -21,6 +25,18 @@ sealed class Screen(val route: String) {
             }
     }
     object AppPicker : Screen("app_picker")
+
+    // ── App Lock (open-block) feature area ────────────────────────────────
+    object OpenBlock : Screen("open_block")
+    object OpenBlockDisclosure : Screen("open_block_disclosure")
+    object OpenBlockRuleCreator : Screen("open_block_rule_creator?ruleId={ruleId}") {
+        fun createRoute(ruleId: Int? = null) =
+            buildString {
+                append("open_block_rule_creator")
+                if (ruleId != null) append("?ruleId=$ruleId")
+            }
+    }
+    object OpenBlockAppPicker : Screen("open_block_app_picker")
 }
 
 @Composable
@@ -35,7 +51,8 @@ fun BeOfflineNavGraph(onRequestVpn: (List<String>) -> Unit) {
             DashboardScreen(
                 onCreateRule = { navController.navigate(Screen.RuleCreator.createRoute()) },
                 onEditRule = { ruleId -> navController.navigate(Screen.RuleCreator.createRoute(ruleId)) },
-                onRequestVpn = onRequestVpn
+                onRequestVpn = onRequestVpn,
+                onOpenAppLock = { navController.navigate(Screen.OpenBlock.route) }
             )
         }
 
@@ -62,6 +79,54 @@ fun BeOfflineNavGraph(onRequestVpn: (List<String>) -> Unit) {
                 initiallySelected = ruleCreatorViewModel.uiState.value.selectedPackages,
                 onDone = { selectedPackages ->
                     ruleCreatorViewModel.onPackagesSelected(selectedPackages)
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        // ── App Lock (open-block) feature area ────────────────────────────
+
+        composable(Screen.OpenBlock.route) {
+            OpenBlockScreen(
+                onBack = { navController.popBackStack() },
+                onCreateRule = { navController.navigate(Screen.OpenBlockRuleCreator.createRoute()) },
+                onEditRule = { ruleId ->
+                    navController.navigate(Screen.OpenBlockRuleCreator.createRoute(ruleId))
+                },
+                onShowDisclosure = { navController.navigate(Screen.OpenBlockDisclosure.route) }
+            )
+        }
+
+        composable(Screen.OpenBlockDisclosure.route) {
+            AccessibilityDisclosureScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.OpenBlockRuleCreator.route) { backStackEntry ->
+            val ruleId = backStackEntry.arguments?.getString("ruleId")?.toIntOrNull()
+            val viewModel: OpenBlockRuleCreatorViewModel = hiltViewModel(backStackEntry)
+            OpenBlockRuleCreatorScreen(
+                ruleId = ruleId,
+                viewModel = viewModel,
+                onNavigateToAppPicker = {
+                    navController.navigate(Screen.OpenBlockAppPicker.route)
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.OpenBlockAppPicker.route) { entry ->
+            // Reuse the same AppPickerScreen, bound to the open-block creator's ViewModel.
+            val creatorEntry = remember(entry) {
+                navController.getBackStackEntry(Screen.OpenBlockRuleCreator.route)
+            }
+            val creatorViewModel: OpenBlockRuleCreatorViewModel = hiltViewModel(creatorEntry)
+
+            AppPickerScreen(
+                initiallySelected = creatorViewModel.uiState.value.selectedPackages,
+                onDone = { selectedPackages ->
+                    creatorViewModel.onPackagesSelected(selectedPackages)
                     navController.popBackStack()
                 }
             )
