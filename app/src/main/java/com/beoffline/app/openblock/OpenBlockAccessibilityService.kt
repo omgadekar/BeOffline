@@ -3,10 +3,13 @@ package com.beoffline.app.openblock
 import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.data.local.AllowanceDao
 import com.beoffline.app.data.model.Allowance
 import com.beoffline.app.data.model.OpenBlockRule
 import com.beoffline.app.data.repository.OpenBlockRuleRepository
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +47,9 @@ class OpenBlockAccessibilityService : AccessibilityService() {
 
     @Inject
     lateinit var allowanceDao: AllowanceDao
+
+    @Inject
+    lateinit var accountabilityRepository: AccountabilityRepository
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -112,10 +118,33 @@ class OpenBlockAccessibilityService : AccessibilityService() {
         // Nothing to interrupt — enforcement is per-event.
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     override fun onDestroy() {
         Log.d(TAG, "Open-block engine disconnected")
         stateManager.setServiceConnected(false)
         overlayManager.detach()
+
+        // Bypass visibility: engine going down while locks are active is a
+        // tamper signal the partner should see. GlobalScope on purpose —
+        // serviceScope dies with this service, but the outbox insert must
+        // outlive it (WorkManager then delivers it whenever network allows).
+        val rulesAtShutdown = activeRules
+        if (rulesAtShutdown.isNotEmpty()) {
+            GlobalScope.launch(Dispatchers.IO) {
+                try {
+                    if (accountabilityRepository.hasPartner()) {
+                        accountabilityRepository.reportTamper(
+                            type = "ACCESSIBILITY_DISABLED",
+                            packageName = null,
+                            dedupeKey = "a11y-destroy-" + java.time.LocalDate.now()
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Tamper report on destroy failed", e)
+                }
+            }
+        }
+
         serviceScope.cancel()
         super.onDestroy()
     }

@@ -8,7 +8,10 @@ import com.beoffline.app.data.local.AllowanceDao
 import com.beoffline.app.data.local.BeOfflineDatabase
 import com.beoffline.app.data.local.BlockRuleDao
 import com.beoffline.app.data.local.OpenBlockRuleDao
+import com.beoffline.app.data.local.OutboxDao
+import com.beoffline.app.data.local.PartnerDao
 import com.beoffline.app.data.local.SoloTeaserStateDao
+import com.beoffline.app.data.local.UnlockRequestCacheDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -30,7 +33,11 @@ object AppModule {
         )
         // Published app: real migrations only. Destructive fallback would wipe
         // users' rules on any schema bump — never re-add it.
-        .addMigrations(BeOfflineDatabase.MIGRATION_1_2, BeOfflineDatabase.MIGRATION_2_3)
+        .addMigrations(
+            BeOfflineDatabase.MIGRATION_1_2,
+            BeOfflineDatabase.MIGRATION_2_3,
+            BeOfflineDatabase.MIGRATION_3_4
+        )
         .build()
     }
 
@@ -49,6 +56,18 @@ object AppModule {
     @Provides
     @Singleton
     fun provideSoloTeaserStateDao(db: BeOfflineDatabase): SoloTeaserStateDao = db.soloTeaserStateDao()
+
+    @Provides
+    @Singleton
+    fun providePartnerDao(db: BeOfflineDatabase): PartnerDao = db.partnerDao()
+
+    @Provides
+    @Singleton
+    fun provideUnlockRequestCacheDao(db: BeOfflineDatabase): UnlockRequestCacheDao = db.unlockRequestCacheDao()
+
+    @Provides
+    @Singleton
+    fun provideOutboxDao(db: BeOfflineDatabase): OutboxDao = db.outboxDao()
 
     @Provides
     fun provideWorkManagerConfiguration(workerFactory: HiltWorkerFactory): Configuration {

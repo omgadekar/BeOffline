@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.beoffline.app.ui.screens.AccessibilityDisclosureScreen
+import com.beoffline.app.ui.screens.AccountabilityScreen
 import com.beoffline.app.ui.screens.AppPickerScreen
 import com.beoffline.app.ui.screens.DashboardScreen
 import com.beoffline.app.ui.screens.OpenBlockRuleCreatorScreen
@@ -37,6 +38,7 @@ sealed class Screen(val route: String) {
             }
     }
     object OpenBlockAppPicker : Screen("open_block_app_picker")
+    object Accountability : Screen("accountability")
 }
 
 @Composable
@@ -93,8 +95,13 @@ fun BeOfflineNavGraph(onRequestVpn: (List<String>) -> Unit) {
                 onEditRule = { ruleId ->
                     navController.navigate(Screen.OpenBlockRuleCreator.createRoute(ruleId))
                 },
-                onShowDisclosure = { navController.navigate(Screen.OpenBlockDisclosure.route) }
+                onShowDisclosure = { navController.navigate(Screen.OpenBlockDisclosure.route) },
+                onOpenAccountability = { navController.navigate(Screen.Accountability.route) }
             )
+        }
+
+        composable(Screen.Accountability.route) {
+            AccountabilityScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Screen.OpenBlockDisclosure.route) {

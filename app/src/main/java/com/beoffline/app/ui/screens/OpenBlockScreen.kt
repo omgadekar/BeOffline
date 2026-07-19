@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
@@ -76,6 +77,7 @@ fun OpenBlockScreen(
     onCreateRule: () -> Unit,
     onEditRule: (Int) -> Unit,
     onShowDisclosure: () -> Unit,
+    onOpenAccountability: () -> Unit,
     viewModel: OpenBlockViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -142,6 +144,37 @@ fun OpenBlockScreen(
                     selectedMinutes = uiState.teaserAllowanceMinutes,
                     onSelect = viewModel::setTeaserAllowanceMinutes
                 )
+            }
+
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Brand800),
+                    modifier = Modifier.clickable(onClick = onOpenAccountability)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.People,
+                            contentDescription = null,
+                            tint = AccentPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Accountability partner", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                            Text(
+                                text = "Pair with someone who approves your unlocks",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                }
             }
 
             item {

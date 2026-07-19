@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1038929620243",
+    "project_id": "beoffline-36d68",
+    "storage_bucket": "beoffline-36d68.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1038929620243:android:fccdcd7b2168e2cef4bee6",
+        "android_client_info": {
+          "package_name": "com.beoffline.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDXJISE_4Aq2g4Q0-HHOf0Ez9drHjFxer0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

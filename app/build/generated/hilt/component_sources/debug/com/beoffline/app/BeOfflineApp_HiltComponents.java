@@ -1,15 +1,25 @@
 package com.beoffline.app;
 
 import androidx.hilt.work.HiltWrapper_WorkerFactoryModule;
+import com.beoffline.app.accountability.AccountabilityMessagingService_GeneratedInjector;
+import com.beoffline.app.accountability.HeartbeatWorker_HiltModule;
+import com.beoffline.app.accountability.OutboxWorker_HiltModule;
 import com.beoffline.app.di.AppModule;
+import com.beoffline.app.di.NetworkModule;
 import com.beoffline.app.notifications.BlockedAppNotificationListenerService_GeneratedInjector;
+import com.beoffline.app.openblock.OpenBlockAccessibilityService_GeneratedInjector;
 import com.beoffline.app.receiver.BootReceiver_GeneratedInjector;
+import com.beoffline.app.receiver.OpenBlockAlarmReceiver_GeneratedInjector;
 import com.beoffline.app.receiver.ScheduleAlarmReceiver_GeneratedInjector;
 import com.beoffline.app.receiver.VpnRecoveryReceiver_GeneratedInjector;
 import com.beoffline.app.scheduler.StartRuleWorker_HiltModule;
+import com.beoffline.app.scheduler.StopOpenBlockRuleWorker_HiltModule;
 import com.beoffline.app.scheduler.StopRuleWorker_HiltModule;
+import com.beoffline.app.ui.screens.AccountabilityViewModel_HiltModules;
 import com.beoffline.app.ui.screens.AppPickerViewModel_HiltModules;
 import com.beoffline.app.ui.screens.DashboardViewModel_HiltModules;
+import com.beoffline.app.ui.screens.OpenBlockRuleCreatorViewModel_HiltModules;
+import com.beoffline.app.ui.screens.OpenBlockViewModel_HiltModules;
 import com.beoffline.app.ui.screens.RuleCreatorViewModel_HiltModules;
 import com.beoffline.app.vpn.BeOfflineVpnService_GeneratedInjector;
 import com.beoffline.app.vpn.VpnHealthWorker_HiltModule;
@@ -141,9 +151,13 @@ public final class BeOfflineApp_HiltComponents {
           ApplicationContextModule.class,
           ActivityRetainedCBuilderModule.class,
           ServiceCBuilderModule.class,
+          HeartbeatWorker_HiltModule.class,
           HiltWrapper_FragmentGetContextFix_FragmentGetContextFixModule.class,
           HiltWrapper_WorkerFactoryModule.class,
+          NetworkModule.class,
+          OutboxWorker_HiltModule.class,
           StartRuleWorker_HiltModule.class,
+          StopOpenBlockRuleWorker_HiltModule.class,
           StopRuleWorker_HiltModule.class,
           VpnHealthWorker_HiltModule.class
       }
@@ -151,6 +165,7 @@ public final class BeOfflineApp_HiltComponents {
   @Singleton
   public abstract static class SingletonC implements BeOfflineApp_GeneratedInjector,
       BootReceiver_GeneratedInjector,
+      OpenBlockAlarmReceiver_GeneratedInjector,
       ScheduleAlarmReceiver_GeneratedInjector,
       VpnRecoveryReceiver_GeneratedInjector,
       FragmentGetContextFix.FragmentGetContextFixEntryPoint,
@@ -162,7 +177,9 @@ public final class BeOfflineApp_HiltComponents {
 
   @Subcomponent
   @ServiceScoped
-  public abstract static class ServiceC implements BlockedAppNotificationListenerService_GeneratedInjector,
+  public abstract static class ServiceC implements AccountabilityMessagingService_GeneratedInjector,
+      BlockedAppNotificationListenerService_GeneratedInjector,
+      OpenBlockAccessibilityService_GeneratedInjector,
       BeOfflineVpnService_GeneratedInjector,
       ServiceComponent,
       GeneratedComponent {
@@ -173,12 +190,15 @@ public final class BeOfflineApp_HiltComponents {
 
   @Subcomponent(
       modules = {
+          AccountabilityViewModel_HiltModules.KeyModule.class,
           AppPickerViewModel_HiltModules.KeyModule.class,
           ActivityCBuilderModule.class,
           ViewModelCBuilderModule.class,
           DashboardViewModel_HiltModules.KeyModule.class,
           HiltWrapper_ActivityRetainedComponentManager_LifecycleModule.class,
           HiltWrapper_SavedStateHandleModule.class,
+          OpenBlockRuleCreatorViewModel_HiltModules.KeyModule.class,
+          OpenBlockViewModel_HiltModules.KeyModule.class,
           RuleCreatorViewModel_HiltModules.KeyModule.class
       }
   )
@@ -215,9 +235,12 @@ public final class BeOfflineApp_HiltComponents {
 
   @Subcomponent(
       modules = {
+          AccountabilityViewModel_HiltModules.BindsModule.class,
           AppPickerViewModel_HiltModules.BindsModule.class,
           DashboardViewModel_HiltModules.BindsModule.class,
           HiltWrapper_HiltViewModelFactory_ViewModelModule.class,
+          OpenBlockRuleCreatorViewModel_HiltModules.BindsModule.class,
+          OpenBlockViewModel_HiltModules.BindsModule.class,
           RuleCreatorViewModel_HiltModules.BindsModule.class
       }
   )

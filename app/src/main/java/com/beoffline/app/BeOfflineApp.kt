@@ -16,4 +16,12 @@ class BeOfflineApp : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+
+    override fun onCreate() {
+        super.onCreate()
+        // Accountability liveness + protection self-check (no-ops when signed out).
+        com.beoffline.app.accountability.HeartbeatWorker.schedule(this)
+        // Flush anything still queued from an offline session.
+        com.beoffline.app.accountability.OutboxWorker.enqueue(this)
+    }
 }

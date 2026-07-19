@@ -1,29 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.beoffline.app.test.app-mergeDebugAndroidTestResources-32:/values-v21/values-v21.xml",
+            "outputFile": "com.beoffline.app.test.app-mergeDebugAndroidTestResources-36:/values-v21/values-v21.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\3285c7a32de5c6337cb8265e8441d154\\transformed\\core-1.13.1\\res\\values-v21\\values-v21.xml",
-                    "from": {
-                        "startLines": "2,3,4,5,6,7,8,9,10,13",
-                        "startColumns": "4,4,4,4,4,4,4,4,4,4",
-                        "startOffsets": "55,173,237,304,368,484,610,736,864,1036",
-                        "endLines": "2,3,4,5,6,7,8,9,12,17",
-                        "endColumns": "117,63,66,63,115,125,125,127,12,12",
-                        "endOffsets": "168,232,299,363,479,605,731,859,1031,1383"
-                    },
-                    "to": {
-                        "startLines": "2,3,4,5,6,7,8,9,28,31",
-                        "startColumns": "4,4,4,4,4,4,4,4,4,4",
-                        "startOffsets": "55,173,237,304,368,484,610,736,1820,1992",
-                        "endLines": "2,3,4,5,6,7,8,9,30,35",
-                        "endColumns": "117,63,66,63,115,125,125,127,12,12",
-                        "endOffsets": "168,232,299,363,479,605,731,859,1987,2339"
-                    }
-                },
-                {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\6f402bd0421d3d021310bf29e49307ad\\transformed\\core-1.6.1\\res\\values-v21\\values.xml",
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\0acafd1d675a7987c8826b8698039669\\transformed\\core-1.6.1\\res\\values-v21\\values.xml",
                     "from": {
                         "startLines": "4,13",
                         "startColumns": "0,0",
@@ -39,6 +20,25 @@
                         "endLines": "18,27",
                         "endColumns": "8,8",
                         "endOffsets": "1338,1815"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\241077370806a4216e3dc80077bf3a2e\\transformed\\core-1.13.1\\res\\values-v21\\values-v21.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9,10,13",
+                        "startColumns": "4,4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,173,237,304,368,484,610,736,864,1036",
+                        "endLines": "2,3,4,5,6,7,8,9,12,17",
+                        "endColumns": "117,63,66,63,115,125,125,127,12,12",
+                        "endOffsets": "168,232,299,363,479,605,731,859,1031,1383"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5,6,7,8,9,28,31",
+                        "startColumns": "4,4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,173,237,304,368,484,610,736,1820,1992",
+                        "endLines": "2,3,4,5,6,7,8,9,30,35",
+                        "endColumns": "117,63,66,63,115,125,125,127,12,12",
+                        "endOffsets": "168,232,299,363,479,605,731,859,1987,2339"
                     }
                 }
             ]

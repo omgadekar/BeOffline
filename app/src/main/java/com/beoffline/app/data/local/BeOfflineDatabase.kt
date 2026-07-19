@@ -7,12 +7,18 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.beoffline.app.data.model.Allowance
 import com.beoffline.app.data.model.BlockRule
+import com.beoffline.app.data.model.CachedUnlockRequest
 import com.beoffline.app.data.model.OpenBlockRule
+import com.beoffline.app.data.model.OutboxItem
+import com.beoffline.app.data.model.Partner
 import com.beoffline.app.data.model.SoloTeaserState
 
 @Database(
-    entities = [BlockRule::class, OpenBlockRule::class, Allowance::class, SoloTeaserState::class],
-    version = 3,
+    entities = [
+        BlockRule::class, OpenBlockRule::class, Allowance::class, SoloTeaserState::class,
+        Partner::class, CachedUnlockRequest::class, OutboxItem::class
+    ],
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -21,6 +27,9 @@ abstract class BeOfflineDatabase : RoomDatabase() {
     abstract fun openBlockRuleDao(): OpenBlockRuleDao
     abstract fun allowanceDao(): AllowanceDao
     abstract fun soloTeaserStateDao(): SoloTeaserStateDao
+    abstract fun partnerDao(): PartnerDao
+    abstract fun unlockRequestCacheDao(): UnlockRequestCacheDao
+    abstract fun outboxDao(): OutboxDao
 
     companion object {
         /**
@@ -75,6 +84,49 @@ abstract class BeOfflineDatabase : RoomDatabase() {
                         "`unlockCount` INTEGER NOT NULL, " +
                         "`updatedAt` INTEGER NOT NULL, " +
                         "PRIMARY KEY(`ruleId`))"
+                )
+            }
+        }
+
+        /**
+         * v3 → v4: accountability layer local cache + offline outbox (M3).
+         * Pure additions; must match schemas/4.json exactly.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `partners` (" +
+                        "`pairingId` TEXT NOT NULL, " +
+                        "`partnerUid` TEXT NOT NULL, " +
+                        "`partnerName` TEXT, " +
+                        "`status` TEXT NOT NULL, " +
+                        "`canApproveAfterUtc` INTEGER NOT NULL, " +
+                        "`removalPending` INTEGER NOT NULL, " +
+                        "`removalEffectiveAtUtc` INTEGER, " +
+                        "`syncedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`pairingId`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `unlock_request_cache` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`direction` TEXT NOT NULL, " +
+                        "`packageName` TEXT NOT NULL, " +
+                        "`appLabel` TEXT NOT NULL, " +
+                        "`status` TEXT NOT NULL, " +
+                        "`requesterName` TEXT, " +
+                        "`requestedAtUtc` INTEGER NOT NULL, " +
+                        "`expiresAtUtc` INTEGER, " +
+                        "`grantedUntilUtc` INTEGER, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `outbox_items` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`type` TEXT NOT NULL, " +
+                        "`clientKey` TEXT NOT NULL, " +
+                        "`payloadJson` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`attempts` INTEGER NOT NULL)"
                 )
             }
         }

@@ -52,6 +52,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.data.model.OpenBlockRule
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.ui.theme.AccentPrimary
@@ -86,7 +87,8 @@ import javax.inject.Singleton
 class BlockOverlayManager @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val blockRuleRepository: BlockRuleRepository,
-    private val teaserController: TeaserController
+    private val teaserController: TeaserController,
+    private val accountabilityRepository: AccountabilityRepository
 ) {
     companion object {
         private const val TAG = "BlockOverlayManager"
@@ -113,8 +115,13 @@ class BlockOverlayManager @Inject constructor(
     fun showBlockScreen(packageName: String, untilText: String?, rule: OpenBlockRule? = null) {
         mainScope.launch {
             val appName = resolveAppName(packageName)
+            val hasPartner = try {
+                accountabilityRepository.hasPartner()
+            } catch (_: Exception) {
+                false
+            }
             try {
-                showOverlay(appName, packageName, untilText, rule)
+                showOverlay(appName, packageName, untilText, rule, hasPartner)
             } catch (e: Exception) {
                 // Never let overlay failure break enforcement — send-home already happened.
                 Log.e(TAG, "Failed to show block overlay", e)
@@ -150,7 +157,8 @@ class BlockOverlayManager @Inject constructor(
         appName: String,
         packageName: String,
         untilText: String?,
-        rule: OpenBlockRule?
+        rule: OpenBlockRule?,
+        hasPartner: Boolean
     ) {
         val service = serviceRef?.get()
         val (windowManager, windowType) = when {
@@ -175,7 +183,9 @@ class BlockOverlayManager @Inject constructor(
                     packageName = packageName,
                     untilText = untilText,
                     rule = rule,
+                    hasPartner = hasPartner,
                     teaserController = teaserController,
+                    askPartner = { accountabilityRepository.enqueueUnlockRequest(packageName, appName) },
                     onTeaserStarted = ::cancelAutoDismiss,
                     onDismiss = { mainScope.launch { hideNow() } }
                 )
@@ -263,6 +273,7 @@ private sealed interface OverlayStage {
     data class Countdown(val difficulty: TeaserEngine.Difficulty) : OverlayStage
     data class Solving(val difficulty: TeaserEngine.Difficulty) : OverlayStage
     data class Granted(val minutes: Int) : OverlayStage
+    data object AskSent : OverlayStage
 }
 
 @Composable
@@ -271,7 +282,9 @@ private fun BlockOverlayRoot(
     packageName: String,
     untilText: String?,
     rule: OpenBlockRule?,
+    hasPartner: Boolean,
     teaserController: TeaserController,
+    askPartner: suspend () -> Unit,
     onTeaserStarted: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -289,6 +302,7 @@ private fun BlockOverlayRoot(
                 appName = appName,
                 untilText = untilText,
                 showUnlock = rule != null,
+                showAskPartner = hasPartner,
                 onDismiss = onDismiss,
                 onUnlock = {
                     if (rule != null) {
@@ -303,8 +317,44 @@ private fun BlockOverlayRoot(
                             }
                         }
                     }
+                },
+                onAskPartner = {
+                    onTeaserStarted() // pause auto-dismiss while we queue
+                    scope.launch {
+                        try {
+                            askPartner()
+                        } catch (_: Exception) {
+                            // Outbox insert is local; a failure here is exceptional.
+                        }
+                        stage = OverlayStage.AskSent
+                    }
                 }
             )
+
+            is OverlayStage.AskSent -> {
+                LaunchedEffect(Unit) {
+                    delay(4_000)
+                    onDismiss()
+                }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(32.dp)
+                ) {
+                    Text(
+                        text = "Request sent to your partner.",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary
+                    )
+                    Text(
+                        // Fail-closed, stated plainly: nothing unlocks until approval.
+                        text = "You'll get a notification when they respond. $appName stays blocked until then — if you're offline, the request goes out once you reconnect.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
 
             is OverlayStage.Countdown -> CountdownStage(
                 difficulty = s.difficulty,
@@ -355,8 +405,10 @@ private fun BlockedStage(
     appName: String,
     untilText: String?,
     showUnlock: Boolean,
+    showAskPartner: Boolean,
     onDismiss: () -> Unit,
-    onUnlock: () -> Unit
+    onUnlock: () -> Unit,
+    onAskPartner: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -391,6 +443,11 @@ private fun BlockedStage(
             )
         ) {
             Text("OK")
+        }
+        if (showAskPartner) {
+            TextButton(onClick = onAskPartner) {
+                Text("Ask my partner to unlock", color = TextSecondary)
+            }
         }
         if (showUnlock) {
             TextButton(onClick = onUnlock) {

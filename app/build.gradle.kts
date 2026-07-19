@@ -22,6 +22,11 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Accountability backend base URL. Debug default targets the host
+        // machine from an emulator (docker/local Kestrel); set the real OCI
+        // domain before a release build.
+        buildConfigField("String", "ACCOUNTABILITY_API_BASE_URL", "\"http://10.0.2.2:5080/\"")
     }
 
     buildTypes {
@@ -77,6 +82,17 @@ ksp {
 dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.messaging)
+
+    // Accountability backend client
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     // Core Android
     implementation(libs.androidx.core.ktx)

@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.beoffline.app.test.app-mergeDebugAndroidTestResources-32:/values-gl/values-gl.xml",
+            "outputFile": "com.beoffline.app.test.app-mergeDebugAndroidTestResources-36:/values-gl/values-gl.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\3285c7a32de5c6337cb8265e8441d154\\transformed\\core-1.13.1\\res\\values-gl\\values-gl.xml",
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\241077370806a4216e3dc80077bf3a2e\\transformed\\core-1.13.1\\res\\values-gl\\values-gl.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",
@@ -21,7 +21,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\15c76f20fc6d50e71853730585fbac12\\transformed\\ui-release\\res\\values-gl\\values-gl.xml",
+                    "source": "C:\\Users\\gadek\\.gradle\\caches\\transforms-4\\0e05545a19d98b2f72d4521b5267960b\\transformed\\ui-release\\res\\values-gl\\values-gl.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",

@@ -1,0 +1,6 @@
+@BeOffline.Api_HostAddress = http://localhost:5150
+
+GET {{BeOffline.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
