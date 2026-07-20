@@ -42,13 +42,23 @@ public sealed class TamperController(AppDbContext db, INotificationService notif
         await db.SaveChangesAsync();
 
         var name = (await db.Users.FindAsync(uid))?.DisplayName ?? "Your partner";
-        var partners = await db.Pairings
+        var partnerUids = await db.Pairings
             .Where(p => p.Status == PairingStatus.Active && (p.UserAUid == uid || p.UserBUid == uid))
+            .Select(p => p.UserAUid == uid ? p.UserBUid : p.UserAUid)
             .ToListAsync();
-        foreach (var pairing in partners)
+        // Group co-members are watchers too (M4).
+        var myGroupIds = await db.GroupMembers
+            .Where(m => m.Uid == uid && m.Status == GroupMemberStatus.Active)
+            .Select(m => m.GroupId)
+            .ToListAsync();
+        var coMemberUids = await db.GroupMembers
+            .Where(m => myGroupIds.Contains(m.GroupId) && m.Uid != uid && m.Status == GroupMemberStatus.Active)
+            .Select(m => m.Uid)
+            .ToListAsync();
+        foreach (var watcherUid in partnerUids.Concat(coMemberUids).Distinct())
         {
             await notifier.NotifyAsync(
-                pairing.PartnerOf(uid), "TAMPER_ALERT",
+                watcherUid, "TAMPER_ALERT",
                 new { uid, type = request.Type, packageName = request.PackageName, occurredAtUtc = request.OccurredAtUtc },
                 "Protection alert",
                 $"{name}: {Describe(request.Type)}");

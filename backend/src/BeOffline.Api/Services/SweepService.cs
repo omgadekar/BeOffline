@@ -86,6 +86,45 @@ public sealed class SweepService(IServiceScopeFactory scopeFactory, IConfigurati
             }
         }
 
+        // 2b. Finalize group-member removals past cooldown (owner leaving hands
+        // the group to the longest-standing remaining member).
+        var memberRemovals = await db.GroupMembers
+            .Include(m => m.Group)
+            .Where(m => m.Status == GroupMemberStatus.Active && m.RemovalEffectiveAtUtc != null && m.RemovalEffectiveAtUtc <= now)
+            .ToListAsync(ct);
+        if (memberRemovals.Count > 0)
+        {
+            var removingIds = memberRemovals.Select(m => m.Id).ToHashSet();
+            foreach (var member in memberRemovals)
+            {
+                member.Status = GroupMemberStatus.Removed;
+                if (member.Group!.OwnerUid == member.Uid)
+                {
+                    var heir = await db.GroupMembers
+                        .Where(m => m.GroupId == member.GroupId && m.Status == GroupMemberStatus.Active &&
+                                    !removingIds.Contains(m.Id))
+                        .OrderBy(m => m.JoinedAtUtc)
+                        .FirstOrDefaultAsync(ct);
+                    if (heir is not null) member.Group.OwnerUid = heir.Uid;
+                }
+            }
+            await db.SaveChangesAsync(ct);
+            foreach (var member in memberRemovals)
+            {
+                var remaining = await db.GroupMembers
+                    .Where(m => m.GroupId == member.GroupId && m.Status == GroupMemberStatus.Active)
+                    .Select(m => m.Uid)
+                    .ToListAsync(ct);
+                foreach (var uid in remaining.Append(member.Uid))
+                {
+                    await notifier.NotifyAsync(
+                        uid, "GROUP_MEMBER_LEFT",
+                        new { groupId = member.GroupId, groupName = member.Group!.Name, uid = member.Uid },
+                        member.Group.Name, "A membership in this group has ended.", ct);
+                }
+            }
+        }
+
         // 3. Hourly: uninstall inference from silent heartbeats.
         if (now - _lastHeartbeatSweepUtc >= TimeSpan.FromHours(1))
         {
@@ -98,13 +137,34 @@ public sealed class SweepService(IServiceScopeFactory scopeFactory, IConfigurati
     {
         var threshold = now - TimeSpan.FromHours(GetThresholdHours());
 
+        // Who watches whom: pairing partners plus co-members of shared groups.
+        var watchers = new Dictionary<string, HashSet<string>>();
+        void AddEdge(string a, string b)
+        {
+            (watchers.TryGetValue(a, out var setA) ? setA : watchers[a] = []).Add(b);
+            (watchers.TryGetValue(b, out var setB) ? setB : watchers[b] = []).Add(a);
+        }
+
         var pairedUids = await db.Pairings
             .Where(p => p.Status == PairingStatus.Active)
             .Select(p => new { p.UserAUid, p.UserBUid })
             .ToListAsync(ct);
-        var uids = pairedUids.SelectMany(p => new[] { p.UserAUid, p.UserBUid }).Distinct().ToList();
+        foreach (var p in pairedUids)
+            AddEdge(p.UserAUid, p.UserBUid);
 
-        foreach (var uid in uids)
+        var groupLinks = await db.GroupMembers
+            .Where(m => m.Status == GroupMemberStatus.Active)
+            .Select(m => new { m.GroupId, m.Uid })
+            .ToListAsync(ct);
+        foreach (var group in groupLinks.GroupBy(m => m.GroupId))
+        {
+            var members = group.Select(m => m.Uid).Distinct().ToList();
+            for (var i = 0; i < members.Count; i++)
+                for (var j = i + 1; j < members.Count; j++)
+                    AddEdge(members[i], members[j]);
+        }
+
+        foreach (var (uid, whoWatches) in watchers)
         {
             var user = await db.Users.FindAsync([uid], ct);
             if (user is null || user.UninstallNotifiedAtUtc != null) continue;
@@ -118,14 +178,10 @@ public sealed class SweepService(IServiceScopeFactory scopeFactory, IConfigurati
             user.UninstallNotifiedAtUtc = now;
             await db.SaveChangesAsync(ct);
 
-            var partners = pairedUids
-                .Where(p => p.UserAUid == uid || p.UserBUid == uid)
-                .Select(p => p.UserAUid == uid ? p.UserBUid : p.UserAUid)
-                .Distinct();
-            foreach (var partnerUid in partners)
+            foreach (var watcherUid in whoWatches)
             {
                 await notifier.NotifyAsync(
-                    partnerUid, "TAMPER_ALERT",
+                    watcherUid, "TAMPER_ALERT",
                     new { uid, type = "APP_UNINSTALLED_SUSPECTED", lastSeenUtc = lastBeat },
                     "Protection alert",
                     $"{user.DisplayName ?? "Your partner"}'s BeOffline has gone silent — the app may have been uninstalled.", ct);

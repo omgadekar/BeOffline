@@ -132,7 +132,7 @@ class OpenBlockAccessibilityService : AccessibilityService() {
         if (rulesAtShutdown.isNotEmpty()) {
             GlobalScope.launch(Dispatchers.IO) {
                 try {
-                    if (accountabilityRepository.hasPartner()) {
+                    if (accountabilityRepository.hasPartner() || accountabilityRepository.hasGroup()) {
                         accountabilityRepository.reportTamper(
                             type = "ACCESSIBILITY_DISABLED",
                             packageName = null,

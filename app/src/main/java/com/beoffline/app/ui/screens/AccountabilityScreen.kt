@@ -67,6 +67,7 @@ import com.beoffline.app.ui.theme.TextSecondary
 @Composable
 fun AccountabilityScreen(
     onBack: () -> Unit,
+    onOpenGroups: () -> Unit = {},
     viewModel: AccountabilityViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -159,6 +160,20 @@ fun AccountabilityScreen(
                 }
 
                 item { PartnerSection(uiState, onCreateInvite = viewModel::createInvite, onAccept = viewModel::acceptInvite, onRemove = viewModel::removePartner) }
+
+                item {
+                    SectionCard {
+                        Text("Groups", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                        Text(
+                            "Ask several people at once — the first response counts. Groups also get a chat.",
+                            style = MaterialTheme.typography.bodySmall, color = TextSecondary
+                        )
+                        Button(
+                            onClick = onOpenGroups,
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary, contentColor = Color.White)
+                        ) { Text("My groups") }
+                    }
+                }
 
                 if (uiState.recentRequests.isNotEmpty()) {
                     item {
@@ -284,6 +299,12 @@ private fun IncomingRequestCard(
             "${request.requesterName ?: "Your partner"} asks to open ${request.appLabel}",
             style = MaterialTheme.typography.titleSmall, color = TextPrimary
         )
+        request.groupName?.let { group ->
+            Text(
+                "Via $group — first response counts.",
+                style = MaterialTheme.typography.bodySmall, color = TextDisabled
+            )
+        }
         Text(
             "Approve for how long?",
             style = MaterialTheme.typography.bodySmall, color = TextSecondary
@@ -318,6 +339,13 @@ private fun RecentRequestRow(request: CachedUnlockRequest) {
                 "${if (request.direction == "OUTGOING") "You" else request.requesterName ?: "Partner"} → ${request.appLabel}",
                 style = MaterialTheme.typography.bodyMedium, color = TextPrimary
             )
+            val detail = listOfNotNull(
+                request.groupName?.let { "via $it" },
+                request.resolvedByName?.let { "resolved by $it" }
+            ).joinToString(" · ")
+            if (detail.isNotEmpty()) {
+                Text(detail, style = MaterialTheme.typography.labelSmall, color = TextDisabled)
+            }
         }
         Text(
             request.status,

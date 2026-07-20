@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.beoffline.app.accountability.RealtimeClient
 import com.beoffline.app.ui.navigation.BeOfflineNavGraph
 import com.beoffline.app.ui.theme.BeOfflineTheme
 import com.beoffline.app.vpn.VpnController
@@ -21,6 +22,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var vpnController: VpnController
+
+    @Inject
+    lateinit var realtimeClient: RealtimeClient
 
     // ── VPN Permission Launcher ────────────────────────────────────────────────
     // Android requires the user to explicitly approve a VPN connection on first use.
@@ -49,6 +53,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // Single-activity app: onStart/onStop ≈ app foreground/background. SignalR
+    // rides the foreground; FCM covers everything else.
+    override fun onStart() {
+        super.onStart()
+        realtimeClient.start()
+    }
+
+    override fun onStop() {
+        realtimeClient.stop()
+        super.onStop()
     }
 
     /**

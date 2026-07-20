@@ -130,4 +130,59 @@ class MigrationTest {
             assertTrue(c.moveToFirst()); assertEquals(2, c.getInt(0))
         }
     }
+
+    @Test
+    fun migrate1To5_fullChain_preservesRules_andCreatesM3M4Tables() {
+        helper.createDatabase(dbName, 1).apply {
+            execSQL(
+                "INSERT INTO block_rules " +
+                    "(name, blockedPackages, ruleType, isActive, startHour, startMinute, " +
+                    "endHour, endMinute, activeDays, timerDurationMinutes, timerStartedAt, createdAt) " +
+                    "VALUES ('Survivor', '[\"com.whatsapp\"]', 'PERMANENT', 1, " +
+                    "NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1721000000000)"
+            )
+            close()
+        }
+
+        // The exact chain a v1 production install walks on upgrade to this build
+        // (runMigrationsAndValidate diffs the end state against schemas/5.json —
+        // including the ALTER TABLE columns M4 adds to unlock_request_cache).
+        val db = helper.runMigrationsAndValidate(
+            dbName, 5, true,
+            BeOfflineDatabase.MIGRATION_1_2, BeOfflineDatabase.MIGRATION_2_3,
+            BeOfflineDatabase.MIGRATION_3_4, BeOfflineDatabase.MIGRATION_4_5
+        )
+
+        db.query("SELECT name FROM block_rules").use { c ->
+            assertEquals(1, c.count)
+            assertTrue(c.moveToFirst())
+            assertEquals("Survivor", c.getString(0))
+        }
+
+        // M3 + M4 tables exist and are writable.
+        db.execSQL(
+            "INSERT INTO unlock_request_cache " +
+                "(id, direction, packageName, appLabel, status, requesterName, requestedAtUtc, " +
+                "expiresAtUtc, grantedUntilUtc, groupId, groupName, resolvedByName) " +
+                "VALUES ('r1', 'OUTGOING', 'com.whatsapp', 'WhatsApp', 'Approved', NULL, " +
+                "1721000000000, 1721000900000, 1721001800000, 'g1', 'Focus crew', 'Sam')"
+        )
+        db.execSQL(
+            "INSERT INTO group_cache (groupId, name, ownerUid, membersJson, syncedAt) " +
+                "VALUES ('g1', 'Focus crew', 'uid1', '[]', 1721000000000)"
+        )
+        db.execSQL(
+            "INSERT INTO chat_messages (id, conversationKey, senderUid, senderName, body, sentAtUtc, pending) " +
+                "VALUES ('m1', 'group:g1', 'uid1', 'Sam', 'hello', 1721000000000, 0)"
+        )
+        db.query("SELECT groupName, resolvedByName FROM unlock_request_cache WHERE id = 'r1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Focus crew", c.getString(0))
+            assertEquals("Sam", c.getString(1))
+        }
+        db.query("SELECT body FROM chat_messages WHERE conversationKey = 'group:g1'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("hello", c.getString(0))
+        }
+    }
 }

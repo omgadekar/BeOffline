@@ -35,7 +35,39 @@ data class CachedUnlockRequest(
     val requesterName: String?,
     val requestedAtUtc: Long,
     val expiresAtUtc: Long?,
-    val grantedUntilUtc: Long?
+    val grantedUntilUtc: Long?,
+    /** Set for group-scoped requests (M4); null = 1:1 partner request. */
+    val groupId: String? = null,
+    val groupName: String? = null,
+    /** Who resolved it — group members see "resolved by X". */
+    val resolvedByName: String? = null
+)
+
+/**
+ * Cached approver group (M4). Members ride along as JSON — the whole row is
+ * refresh-overwritten from the server, never edited locally.
+ */
+@Entity(tableName = "group_cache")
+data class GroupCache(
+    /** Server group id (GUID string). */
+    @PrimaryKey val groupId: String,
+    val name: String,
+    val ownerUid: String,
+    val membersJson: String,
+    val syncedAt: Long = System.currentTimeMillis()
+)
+
+/** Cached chat message (M4). Pending rows are local echoes awaiting the outbox. */
+@Entity(tableName = "chat_messages")
+data class ChatMessageCache(
+    /** Server message id (GUID string) — or the clientMessageId while pending. */
+    @PrimaryKey val id: String,
+    val conversationKey: String,    // "group:{groupId}"
+    val senderUid: String,
+    val senderName: String?,
+    val body: String,
+    val sentAtUtc: Long,
+    val pending: Boolean = false
 )
 
 /**

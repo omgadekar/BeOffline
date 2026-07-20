@@ -71,6 +71,71 @@ public sealed class Pairing
     public string PartnerOf(string uid) => UserAUid == uid ? UserBUid : UserAUid;
 }
 
+public enum GroupMemberStatus
+{
+    Active,
+    Removed
+}
+
+/// <summary>
+/// An approver group (M4): any active member can request an unlock, any OTHER
+/// active member can approve it — first decisive response wins (quorum v1).
+/// </summary>
+public sealed class ApproverGroup
+{
+    public Guid Id { get; set; }
+    public required string Name { get; set; }
+    /// <summary>Gates removing other members; transferred by the sweep if the owner leaves.</summary>
+    public required string OwnerUid { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+}
+
+/// <summary>
+/// Membership carries the same two abuse guards as <see cref="Pairing"/>:
+/// anti-puppet activation delay (CanApproveAfterUtc) and a non-instant,
+/// loudly-announced removal cooldown.
+/// </summary>
+public sealed class GroupMember
+{
+    public Guid Id { get; set; }
+    public Guid GroupId { get; set; }
+    public ApproverGroup? Group { get; set; }
+    public required string Uid { get; set; }
+    public GroupMemberStatus Status { get; set; }
+    public DateTime JoinedAtUtc { get; set; }
+    public DateTime CanApproveAfterUtc { get; set; }
+
+    public string? RemovalRequestedByUid { get; set; }
+    public DateTime? RemovalRequestedAtUtc { get; set; }
+    public DateTime? RemovalEffectiveAtUtc { get; set; }
+}
+
+/// <summary>Separate table from pairing invites so the two flows can't cross-consume codes.</summary>
+public sealed class GroupInviteCode
+{
+    public required string Code { get; set; }
+    public Guid GroupId { get; set; }
+    public required string IssuerUid { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime ExpiresAtUtc { get; set; }
+    public string? ConsumedByUid { get; set; }
+}
+
+/// <summary>
+/// Group chat (M4). ConversationKey is "group:{groupId}"; the pair:{a}:{b}
+/// form is reserved for 1:1 chat later, so the table needs no schema change then.
+/// </summary>
+public sealed class ChatMessage
+{
+    public Guid Id { get; set; }
+    public required string ConversationKey { get; set; }
+    public required string SenderUid { get; set; }
+    public required string Body { get; set; }
+    /// <summary>Client idempotency key — the offline outbox may retry a send.</summary>
+    public required string ClientMessageId { get; set; }
+    public DateTime SentAtUtc { get; set; }
+}
+
 public enum UnlockRequestStatus
 {
     Pending,
@@ -80,11 +145,14 @@ public enum UnlockRequestStatus
     Cancelled
 }
 
+/// <summary>Scoped to exactly one of PairingId (1:1) or GroupId (fan-out, first responder wins).</summary>
 public sealed class UnlockRequest
 {
     public Guid Id { get; set; }
-    public Guid PairingId { get; set; }
+    public Guid? PairingId { get; set; }
     public Pairing? Pairing { get; set; }
+    public Guid? GroupId { get; set; }
+    public ApproverGroup? Group { get; set; }
     public required string RequesterUid { get; set; }
     public required string PackageName { get; set; }
     public required string AppLabel { get; set; }

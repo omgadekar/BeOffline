@@ -22,11 +22,6 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-
-        // Accountability backend base URL. Debug default targets the host
-        // machine from an emulator (docker/local Kestrel); set the real OCI
-        // domain before a release build.
-        buildConfigField("String", "ACCOUNTABILITY_API_BASE_URL", "\"http://10.0.2.2:5080/\"")
     }
 
     buildTypes {
@@ -38,9 +33,21 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // MUST be HTTPS (release builds block cleartext) and MUST be set to
+            // the real deployed host before shipping — the placeholder does not
+            // resolve, so a forgotten edit fails loudly, not silently.
+            buildConfigField(
+                "String", "ACCOUNTABILITY_API_BASE_URL",
+                "\"https://beoffline-api.invalid/\""
+            )
         }
         debug {
             isDebuggable = true
+            // Host machine as seen from an emulator (local Kestrel / docker).
+            buildConfigField(
+                "String", "ACCOUNTABILITY_API_BASE_URL",
+                "\"http://10.0.2.2:5080/\""
+            )
         }
     }
 
@@ -93,6 +100,7 @@ dependencies {
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.googleid)
     implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.microsoft.signalr)
 
     // Core Android
     implementation(libs.androidx.core.ktx)

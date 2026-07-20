@@ -10,6 +10,8 @@ import com.beoffline.app.ui.screens.AccessibilityDisclosureScreen
 import com.beoffline.app.ui.screens.AccountabilityScreen
 import com.beoffline.app.ui.screens.AppPickerScreen
 import com.beoffline.app.ui.screens.DashboardScreen
+import com.beoffline.app.ui.screens.GroupChatScreen
+import com.beoffline.app.ui.screens.GroupsScreen
 import com.beoffline.app.ui.screens.OpenBlockRuleCreatorScreen
 import com.beoffline.app.ui.screens.OpenBlockRuleCreatorViewModel
 import com.beoffline.app.ui.screens.OpenBlockScreen
@@ -39,6 +41,10 @@ sealed class Screen(val route: String) {
     }
     object OpenBlockAppPicker : Screen("open_block_app_picker")
     object Accountability : Screen("accountability")
+    object Groups : Screen("groups")
+    object GroupChat : Screen("group_chat/{groupId}") {
+        fun createRoute(groupId: String) = "group_chat/$groupId"
+    }
 }
 
 @Composable
@@ -101,7 +107,23 @@ fun BeOfflineNavGraph(onRequestVpn: (List<String>) -> Unit) {
         }
 
         composable(Screen.Accountability.route) {
-            AccountabilityScreen(onBack = { navController.popBackStack() })
+            AccountabilityScreen(
+                onBack = { navController.popBackStack() },
+                onOpenGroups = { navController.navigate(Screen.Groups.route) }
+            )
+        }
+
+        composable(Screen.Groups.route) {
+            GroupsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenChat = { groupId ->
+                    navController.navigate(Screen.GroupChat.createRoute(groupId))
+                }
+            )
+        }
+
+        composable(Screen.GroupChat.route) {
+            GroupChatScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Screen.OpenBlockDisclosure.route) {

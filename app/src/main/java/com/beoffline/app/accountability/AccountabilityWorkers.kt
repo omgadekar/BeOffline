@@ -83,7 +83,7 @@ class HeartbeatWorker @AssistedInject constructor(
 
         val hasActiveRules = openBlockRuleRepository.getActiveRulesOnce().isNotEmpty()
         val accessibilityOn = backgroundProtectionManager.isAccessibilityServiceEnabled()
-        if (hasActiveRules && !accessibilityOn && repository.hasPartner()) {
+        if (hasActiveRules && !accessibilityOn && (repository.hasPartner() || repository.hasGroup())) {
             val day = java.time.LocalDate.now().toString()
             repository.reportTamper(
                 type = "ACCESSIBILITY_DISABLED",

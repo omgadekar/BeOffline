@@ -7,6 +7,8 @@ import androidx.hilt.work.HiltWorkerFactory
 import com.beoffline.app.data.local.AllowanceDao
 import com.beoffline.app.data.local.BeOfflineDatabase
 import com.beoffline.app.data.local.BlockRuleDao
+import com.beoffline.app.data.local.ChatMessageDao
+import com.beoffline.app.data.local.GroupCacheDao
 import com.beoffline.app.data.local.OpenBlockRuleDao
 import com.beoffline.app.data.local.OutboxDao
 import com.beoffline.app.data.local.PartnerDao
@@ -36,7 +38,8 @@ object AppModule {
         .addMigrations(
             BeOfflineDatabase.MIGRATION_1_2,
             BeOfflineDatabase.MIGRATION_2_3,
-            BeOfflineDatabase.MIGRATION_3_4
+            BeOfflineDatabase.MIGRATION_3_4,
+            BeOfflineDatabase.MIGRATION_4_5
         )
         .build()
     }
@@ -68,6 +71,14 @@ object AppModule {
     @Provides
     @Singleton
     fun provideOutboxDao(db: BeOfflineDatabase): OutboxDao = db.outboxDao()
+
+    @Provides
+    @Singleton
+    fun provideGroupCacheDao(db: BeOfflineDatabase): GroupCacheDao = db.groupCacheDao()
+
+    @Provides
+    @Singleton
+    fun provideChatMessageDao(db: BeOfflineDatabase): ChatMessageDao = db.chatMessageDao()
 
     @Provides
     fun provideWorkManagerConfiguration(workerFactory: HiltWorkerFactory): Configuration {

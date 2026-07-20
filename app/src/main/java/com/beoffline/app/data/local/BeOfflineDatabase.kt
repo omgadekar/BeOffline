@@ -8,6 +8,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.beoffline.app.data.model.Allowance
 import com.beoffline.app.data.model.BlockRule
 import com.beoffline.app.data.model.CachedUnlockRequest
+import com.beoffline.app.data.model.ChatMessageCache
+import com.beoffline.app.data.model.GroupCache
 import com.beoffline.app.data.model.OpenBlockRule
 import com.beoffline.app.data.model.OutboxItem
 import com.beoffline.app.data.model.Partner
@@ -16,9 +18,10 @@ import com.beoffline.app.data.model.SoloTeaserState
 @Database(
     entities = [
         BlockRule::class, OpenBlockRule::class, Allowance::class, SoloTeaserState::class,
-        Partner::class, CachedUnlockRequest::class, OutboxItem::class
+        Partner::class, CachedUnlockRequest::class, OutboxItem::class,
+        GroupCache::class, ChatMessageCache::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -30,6 +33,8 @@ abstract class BeOfflineDatabase : RoomDatabase() {
     abstract fun partnerDao(): PartnerDao
     abstract fun unlockRequestCacheDao(): UnlockRequestCacheDao
     abstract fun outboxDao(): OutboxDao
+    abstract fun groupCacheDao(): GroupCacheDao
+    abstract fun chatMessageDao(): ChatMessageDao
 
     companion object {
         /**
@@ -128,6 +133,39 @@ abstract class BeOfflineDatabase : RoomDatabase() {
                         "`createdAt` INTEGER NOT NULL, " +
                         "`attempts` INTEGER NOT NULL)"
                 )
+            }
+        }
+
+        /**
+         * v4 → v5: groups + chat (M4). Two new cache tables plus three nullable
+         * columns on the request cache for group-scoped requests. Additive only;
+         * must match schemas/5.json exactly.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `group_cache` (" +
+                        "`groupId` TEXT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`ownerUid` TEXT NOT NULL, " +
+                        "`membersJson` TEXT NOT NULL, " +
+                        "`syncedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`groupId`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `chat_messages` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`conversationKey` TEXT NOT NULL, " +
+                        "`senderUid` TEXT NOT NULL, " +
+                        "`senderName` TEXT, " +
+                        "`body` TEXT NOT NULL, " +
+                        "`sentAtUtc` INTEGER NOT NULL, " +
+                        "`pending` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL("ALTER TABLE `unlock_request_cache` ADD COLUMN `groupId` TEXT")
+                db.execSQL("ALTER TABLE `unlock_request_cache` ADD COLUMN `groupName` TEXT")
+                db.execSQL("ALTER TABLE `unlock_request_cache` ADD COLUMN `resolvedByName` TEXT")
             }
         }
     }

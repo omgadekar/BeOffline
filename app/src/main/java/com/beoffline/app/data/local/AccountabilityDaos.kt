@@ -5,6 +5,8 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.beoffline.app.data.model.CachedUnlockRequest
+import com.beoffline.app.data.model.ChatMessageCache
+import com.beoffline.app.data.model.GroupCache
 import com.beoffline.app.data.model.OutboxItem
 import com.beoffline.app.data.model.Partner
 import kotlinx.coroutines.flow.Flow
@@ -42,6 +44,42 @@ interface UnlockRequestCacheDao {
     suspend fun delete(id: String)
 
     @Query("DELETE FROM unlock_request_cache WHERE requestedAtUtc < :beforeMillis")
+    suspend fun pruneOlderThan(beforeMillis: Long)
+}
+
+@Dao
+interface GroupCacheDao {
+    @Query("SELECT * FROM group_cache ORDER BY syncedAt ASC")
+    fun getAll(): Flow<List<GroupCache>>
+
+    @Query("SELECT * FROM group_cache ORDER BY syncedAt ASC")
+    suspend fun getAllOnce(): List<GroupCache>
+
+    @Query("SELECT * FROM group_cache WHERE groupId = :groupId")
+    suspend fun getById(groupId: String): GroupCache?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(groups: List<GroupCache>)
+
+    @Query("DELETE FROM group_cache")
+    suspend fun clear()
+}
+
+@Dao
+interface ChatMessageDao {
+    @Query("SELECT * FROM chat_messages WHERE conversationKey = :key ORDER BY sentAtUtc ASC")
+    fun forConversation(key: String): Flow<List<ChatMessageCache>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(message: ChatMessageCache)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(messages: List<ChatMessageCache>)
+
+    @Query("DELETE FROM chat_messages WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("DELETE FROM chat_messages WHERE sentAtUtc < :beforeMillis AND pending = 0")
     suspend fun pruneOlderThan(beforeMillis: Long)
 }
 

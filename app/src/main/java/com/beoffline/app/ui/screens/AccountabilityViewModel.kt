@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.accountability.AuthManager
+import com.beoffline.app.accountability.RealtimeClient
 import com.beoffline.app.data.model.CachedUnlockRequest
 import com.beoffline.app.data.model.Partner
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,7 +31,8 @@ data class AccountabilityUiState(
 @HiltViewModel
 class AccountabilityViewModel @Inject constructor(
     private val authManager: AuthManager,
-    private val repository: AccountabilityRepository
+    private val repository: AccountabilityRepository,
+    private val realtimeClient: RealtimeClient
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountabilityUiState())
@@ -69,6 +71,8 @@ class AccountabilityViewModel @Inject constructor(
         authManager.signIn(activityContext)
             .onSuccess {
                 repository.registerDevice()
+                // The foreground SignalR connection skipped itself pre-sign-in.
+                realtimeClient.start()
                 refreshQuietly()
             }
             .onFailure { e -> _uiState.update { it.copy(message = e.message) } }
@@ -124,6 +128,7 @@ class AccountabilityViewModel @Inject constructor(
         try {
             repository.refreshPartners()
             repository.refreshRequests()
+            repository.refreshGroups()
         } catch (_: Exception) {
             // Offline — cached data stands.
         }

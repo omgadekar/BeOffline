@@ -12,12 +12,16 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.beoffline.app.MainActivity
 import com.beoffline.app.data.local.AllowanceDao
+import com.beoffline.app.data.local.ChatMessageDao
+import com.beoffline.app.data.local.GroupCacheDao
 import com.beoffline.app.data.local.OutboxDao
 import com.beoffline.app.data.local.PartnerDao
 import com.beoffline.app.data.local.UnlockRequestCacheDao
 import com.beoffline.app.data.model.Allowance
 import com.beoffline.app.data.model.AllowanceSource
 import com.beoffline.app.data.model.CachedUnlockRequest
+import com.beoffline.app.data.model.ChatMessageCache
+import com.beoffline.app.data.model.GroupCache
 import com.beoffline.app.data.model.OutboxItem
 import com.beoffline.app.data.model.Partner
 import com.google.firebase.auth.FirebaseAuth
@@ -46,7 +50,9 @@ class AccountabilityRepository @Inject constructor(
     private val partnerDao: PartnerDao,
     private val requestCacheDao: UnlockRequestCacheDao,
     private val outboxDao: OutboxDao,
-    private val allowanceDao: AllowanceDao
+    private val allowanceDao: AllowanceDao,
+    private val groupCacheDao: GroupCacheDao,
+    private val chatMessageDao: ChatMessageDao
 ) {
     companion object {
         private const val TAG = "AccountabilityRepo"
@@ -55,17 +61,33 @@ class AccountabilityRepository @Inject constructor(
         private const val KEY_DEVICE_ID = "device_id"
         private const val OUTBOX_UNLOCK_REQUEST = "UNLOCK_REQUEST"
         private const val OUTBOX_TAMPER = "TAMPER_EVENT"
+        private const val OUTBOX_CHAT = "CHAT_MESSAGE"
+
+        fun conversationKeyFor(groupId: String) = "group:$groupId"
     }
 
     private val gson = Gson()
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    /** Conversation currently on screen — its incoming messages skip the notification. */
+    @Volatile
+    var activeConversationKey: String? = null
+
     val partners: Flow<List<Partner>> = partnerDao.getActive()
     val allRequests: Flow<List<CachedUnlockRequest>> = requestCacheDao.getAll()
     val incomingPending: Flow<List<CachedUnlockRequest>> = requestCacheDao.getIncomingPending()
+    val groups: Flow<List<GroupCache>> = groupCacheDao.getAll()
+
+    fun myUid(): String? = FirebaseAuth.getInstance().currentUser?.uid
 
     suspend fun hasPartner(): Boolean =
         FirebaseAuth.getInstance().currentUser != null && partnerDao.getActiveOnce().isNotEmpty()
+
+    suspend fun hasGroup(): Boolean =
+        FirebaseAuth.getInstance().currentUser != null && groupCacheDao.getAllOnce().isNotEmpty()
+
+    /** Oldest-joined group — the overlay's "Ask my group" target (v1: no chooser). */
+    suspend fun firstGroup(): GroupCache? = groupCacheDao.getAllOnce().firstOrNull()
 
     // ── Pairing ───────────────────────────────────────────────────────────────
 
@@ -88,15 +110,90 @@ class AccountabilityRepository @Inject constructor(
         partnerDao.upsertAll(dtos.map { it.toEntity() })
     }
 
+    // ── Groups (M4) ───────────────────────────────────────────────────────────
+
+    suspend fun createGroup(name: String): GroupDto {
+        val dto = api.createGroup(CreateGroupBody(name))
+        refreshGroups()
+        return dto
+    }
+
+    suspend fun createGroupInvite(groupId: String): InviteResponseDto = api.createGroupInvite(groupId)
+
+    suspend fun joinGroup(code: String): GroupDto {
+        val dto = api.joinGroup(JoinGroupBody(code))
+        refreshGroups()
+        return dto
+    }
+
+    /** Leave (memberUid == mine) or, as owner, remove someone — starts the visible cooldown. */
+    suspend fun removeGroupMember(groupId: String, memberUid: String) {
+        api.removeGroupMember(groupId, memberUid)
+        refreshGroups()
+    }
+
+    suspend fun refreshGroups() {
+        val dtos = api.listGroups()
+        groupCacheDao.clear()
+        groupCacheDao.upsertAll(dtos.map { it.toEntity() })
+    }
+
+    fun membersOf(group: GroupCache): List<GroupMemberDto> = try {
+        gson.fromJson(group.membersJson, Array<GroupMemberDto>::class.java).toList()
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    // ── Chat (M4) ─────────────────────────────────────────────────────────────
+
+    fun chatMessages(groupId: String): Flow<List<ChatMessageCache>> =
+        chatMessageDao.forConversation(conversationKeyFor(groupId))
+
+    /**
+     * Offline-first send: a pending local echo appears immediately; the outbox
+     * delivers when the network allows and swaps in the server's copy.
+     */
+    suspend fun sendChatMessage(groupId: String, text: String) {
+        val user = FirebaseAuth.getInstance().currentUser ?: return
+        val body = text.trim()
+        if (body.isEmpty()) return
+        val clientMessageId = UUID.randomUUID().toString()
+        chatMessageDao.upsert(
+            ChatMessageCache(
+                id = clientMessageId,
+                conversationKey = conversationKeyFor(groupId),
+                senderUid = user.uid,
+                senderName = user.displayName,
+                body = body,
+                sentAtUtc = System.currentTimeMillis(),
+                pending = true
+            )
+        )
+        outboxDao.insert(
+            OutboxItem(
+                type = OUTBOX_CHAT,
+                clientKey = clientMessageId,
+                payloadJson = gson.toJson(ChatOutboxPayload(groupId, clientMessageId, body))
+            )
+        )
+        OutboxWorker.enqueue(context)
+    }
+
+    suspend fun refreshChat(groupId: String) {
+        val dtos = api.listChatMessages(groupId)
+        chatMessageDao.upsertAll(dtos.map { it.toEntity() })
+        chatMessageDao.pruneOlderThan(System.currentTimeMillis() - 30L * 24 * 3600 * 1000)
+    }
+
     // ── Unlock requests ───────────────────────────────────────────────────────
 
     /**
-     * Queues a request for the partner (offline-safe). Returns the client id;
-     * status is visible in the request cache ("Queued" until the server acks).
+     * Queues a request for the partner or a group (offline-safe). Returns the
+     * client id; status is visible in the cache ("Queued" until the server acks).
      */
-    suspend fun enqueueUnlockRequest(packageName: String, appLabel: String): String {
+    suspend fun enqueueUnlockRequest(packageName: String, appLabel: String, groupId: String? = null): String {
         val clientRequestId = UUID.randomUUID().toString()
-        val body = CreateRequestBody(clientRequestId, packageName, appLabel, pairingId = null)
+        val body = CreateRequestBody(clientRequestId, packageName, appLabel, pairingId = null, groupId = groupId)
         outboxDao.insert(
             OutboxItem(type = OUTBOX_UNLOCK_REQUEST, clientKey = clientRequestId, payloadJson = gson.toJson(body))
         )
@@ -110,7 +207,8 @@ class AccountabilityRepository @Inject constructor(
                 requesterName = null,
                 requestedAtUtc = System.currentTimeMillis(),
                 expiresAtUtc = null,
-                grantedUntilUtc = null
+                grantedUntilUtc = null,
+                groupId = groupId
             )
         )
         OutboxWorker.enqueue(context)
@@ -197,6 +295,16 @@ class AccountabilityRepository @Inject constructor(
                         val body = gson.fromJson(item.payloadJson, TamperBody::class.java)
                         api.reportTamper(body)
                     }
+                    OUTBOX_CHAT -> {
+                        val payload = gson.fromJson(item.payloadJson, ChatOutboxPayload::class.java)
+                        val dto = api.sendChatMessage(
+                            payload.groupId,
+                            SendChatBody(payload.clientMessageId, payload.body)
+                        )
+                        // Server copy replaces the pending local echo.
+                        chatMessageDao.delete(payload.clientMessageId)
+                        chatMessageDao.upsert(dto.toEntity())
+                    }
                 }
                 outboxDao.delete(item.id)
             } catch (e: Exception) {
@@ -244,6 +352,16 @@ class AccountabilityRepository @Inject constructor(
                     "${dto.appLabel} stays blocked."
                 )
             }
+            "REQUEST_RESOLVED" -> {
+                // Group scope: someone else already answered ("resolved by X").
+                val dto = gson.fromJson(payloadJson, UnlockRequestDto::class.java)
+                requestCacheDao.upsert(dto.toEntity("INCOMING"))
+                notify(
+                    dto.id.hashCode(),
+                    "Request resolved",
+                    "${dto.resolvedByName ?: "Another member"} already responded for ${dto.appLabel}."
+                )
+            }
             "INVITE_ACCEPTED", "PARTNER_REMOVAL_STARTED", "PARTNER_REMOVED" -> {
                 try { refreshPartners() } catch (_: Exception) { }
                 val message = when (type) {
@@ -252,6 +370,30 @@ class AccountabilityRepository @Inject constructor(
                     else -> "An accountability pairing has ended."
                 }
                 notify(type.hashCode(), "Accountability update", message)
+            }
+            "GROUP_MEMBER_JOINED", "GROUP_MEMBER_REMOVAL_STARTED", "GROUP_MEMBER_LEFT" -> {
+                try { refreshGroups() } catch (_: Exception) { }
+                val map = try { gson.fromJson(payloadJson, Map::class.java) } catch (_: Exception) { null }
+                val groupName = map?.get("groupName")?.toString() ?: "Your group"
+                val message = when (type) {
+                    "GROUP_MEMBER_JOINED" -> "A new member joined $groupName."
+                    "GROUP_MEMBER_REMOVAL_STARTED" -> "A member is leaving $groupName. Their membership stays active for the cooldown period."
+                    else -> "A membership in $groupName has ended."
+                }
+                notify((type + groupName).hashCode(), groupName, message)
+            }
+            "CHAT_MESSAGE" -> {
+                val dto = gson.fromJson(payloadJson, ChatMessageDto::class.java)
+                chatMessageDao.upsert(dto.toEntity())
+                // No notification for your own echo or the conversation on screen.
+                if (dto.senderUid != myUid() && dto.conversationKey != activeConversationKey) {
+                    val preview = if (dto.body.length > 120) dto.body.take(120) + "…" else dto.body
+                    notify(
+                        dto.conversationKey.hashCode(),
+                        dto.senderName ?: "Group chat",
+                        preview
+                    )
+                }
             }
             "TAMPER_ALERT" -> {
                 notify(
@@ -269,9 +411,9 @@ class AccountabilityRepository @Inject constructor(
         allowanceDao.insert(
             Allowance(
                 packageName = request.packageName,
-                ruleId = 0, // partner grants are not rule-scoped
+                ruleId = 0, // remote grants are not rule-scoped
                 grantedUntil = grantedUntil,
-                source = AllowanceSource.PARTNER
+                source = if (request.groupId != null) AllowanceSource.GROUP else AllowanceSource.PARTNER
             )
         )
     }
@@ -333,6 +475,33 @@ class AccountabilityRepository @Inject constructor(
         requesterName = requesterName,
         requestedAtUtc = Instant.parse(requestedAtUtc).toEpochMilli(),
         expiresAtUtc = Instant.parse(expiresAtUtc).toEpochMilli(),
-        grantedUntilUtc = grantedUntilUtc?.let { Instant.parse(it).toEpochMilli() }
+        grantedUntilUtc = grantedUntilUtc?.let { Instant.parse(it).toEpochMilli() },
+        groupId = groupId,
+        groupName = groupName,
+        resolvedByName = resolvedByName
+    )
+
+    private fun GroupDto.toEntity() = GroupCache(
+        groupId = id,
+        name = name,
+        ownerUid = ownerUid,
+        membersJson = gson.toJson(members)
+    )
+
+    private fun ChatMessageDto.toEntity() = ChatMessageCache(
+        id = id,
+        conversationKey = conversationKey,
+        senderUid = senderUid,
+        senderName = senderName,
+        body = body,
+        sentAtUtc = Instant.parse(sentAtUtc).toEpochMilli(),
+        pending = false
     )
 }
+
+/** Outbox payload for a queued chat message. */
+data class ChatOutboxPayload(
+    val groupId: String,
+    val clientMessageId: String,
+    val body: String
+)

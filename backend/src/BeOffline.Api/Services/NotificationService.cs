@@ -9,7 +9,9 @@ namespace BeOffline.Api.Services;
 /// and FCM (wakes the app when backgrounded). Event types are the shared
 /// vocabulary with the Android client:
 ///   UNLOCK_REQUEST, REQUEST_APPROVED, REQUEST_DENIED, REQUEST_EXPIRED,
-///   INVITE_ACCEPTED, PARTNER_REMOVAL_STARTED, PARTNER_REMOVED, TAMPER_ALERT
+///   REQUEST_RESOLVED, INVITE_ACCEPTED, PARTNER_REMOVAL_STARTED,
+///   PARTNER_REMOVED, TAMPER_ALERT, GROUP_MEMBER_JOINED,
+///   GROUP_MEMBER_REMOVAL_STARTED, GROUP_MEMBER_LEFT, CHAT_MESSAGE
 /// </summary>
 public interface INotificationService
 {

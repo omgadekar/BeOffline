@@ -31,19 +31,67 @@ public sealed record PairingDto(
         p.RemovalEffectiveAtUtc);
 }
 
+// ── Groups ───────────────────────────────────────────────────────────────────
+
+public sealed record CreateGroupRequest(string Name);
+
+public sealed record JoinGroupRequest(string Code);
+
+public sealed record GroupMemberDto(
+    string Uid,
+    string? DisplayName,
+    string Status,
+    DateTime JoinedAtUtc,
+    DateTime CanApproveAfterUtc,
+    bool RemovalPending,
+    DateTime? RemovalEffectiveAtUtc,
+    DateTime? LastSeenAtUtc)
+{
+    public static GroupMemberDto From(GroupMember m, string? displayName, DateTime? lastSeenAtUtc) => new(
+        m.Uid, displayName, m.Status.ToString(), m.JoinedAtUtc, m.CanApproveAfterUtc,
+        m.RemovalRequestedAtUtc != null && m.Status == GroupMemberStatus.Active,
+        m.RemovalEffectiveAtUtc, lastSeenAtUtc);
+}
+
+public sealed record GroupDto(
+    Guid Id,
+    string Name,
+    string OwnerUid,
+    DateTime CreatedAtUtc,
+    List<GroupMemberDto> Members);
+
+// ── Chat ─────────────────────────────────────────────────────────────────────
+
+public sealed record SendChatMessageRequest(string ClientMessageId, string Body);
+
+public sealed record ChatMessageDto(
+    Guid Id,
+    string ConversationKey,
+    string SenderUid,
+    string? SenderName,
+    string Body,
+    DateTime SentAtUtc)
+{
+    public static ChatMessageDto From(ChatMessage m, string? senderName = null) => new(
+        m.Id, m.ConversationKey, m.SenderUid, senderName, m.Body, m.SentAtUtc);
+}
+
 // ── Unlock requests ──────────────────────────────────────────────────────────
 
 public sealed record CreateUnlockRequest(
     string ClientRequestId,
     string PackageName,
     string AppLabel,
-    Guid? PairingId);
+    Guid? PairingId,
+    Guid? GroupId = null);
 
 public sealed record RespondToRequest(string Verdict, int? DurationMinutes);
 
 public sealed record UnlockRequestDto(
     Guid Id,
-    Guid PairingId,
+    Guid? PairingId,
+    Guid? GroupId,
+    string? GroupName,
     string RequesterUid,
     string? RequesterName,
     string PackageName,
@@ -52,13 +100,15 @@ public sealed record UnlockRequestDto(
     DateTime RequestedAtUtc,
     DateTime ExpiresAtUtc,
     string? ResolvedByUid,
+    string? ResolvedByName,
     int? GrantedDurationMinutes,
     DateTime? GrantedUntilUtc)
 {
-    public static UnlockRequestDto From(UnlockRequest r, string? requesterName = null) => new(
-        r.Id, r.PairingId, r.RequesterUid, requesterName, r.PackageName, r.AppLabel,
-        r.Status.ToString(), r.RequestedAtUtc, r.ExpiresAtUtc,
-        r.ResolvedByUid, r.GrantedDurationMinutes, r.GrantedUntilUtc);
+    public static UnlockRequestDto From(
+        UnlockRequest r, string? requesterName = null, string? groupName = null, string? resolvedByName = null) => new(
+        r.Id, r.PairingId, r.GroupId, groupName ?? r.Group?.Name, r.RequesterUid, requesterName,
+        r.PackageName, r.AppLabel, r.Status.ToString(), r.RequestedAtUtc, r.ExpiresAtUtc,
+        r.ResolvedByUid, resolvedByName, r.GrantedDurationMinutes, r.GrantedUntilUtc);
 }
 
 // ── Devices / tamper ─────────────────────────────────────────────────────────

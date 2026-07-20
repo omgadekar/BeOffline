@@ -53,6 +53,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.beoffline.app.accountability.AccountabilityRepository
+import com.beoffline.app.data.model.GroupCache
 import com.beoffline.app.data.model.OpenBlockRule
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.ui.theme.AccentPrimary
@@ -120,8 +121,14 @@ class BlockOverlayManager @Inject constructor(
             } catch (_: Exception) {
                 false
             }
+            // v1: no in-overlay chooser — the oldest-joined group is the target.
+            val group = try {
+                accountabilityRepository.firstGroup()
+            } catch (_: Exception) {
+                null
+            }
             try {
-                showOverlay(appName, packageName, untilText, rule, hasPartner)
+                showOverlay(appName, packageName, untilText, rule, hasPartner, group)
             } catch (e: Exception) {
                 // Never let overlay failure break enforcement — send-home already happened.
                 Log.e(TAG, "Failed to show block overlay", e)
@@ -158,7 +165,8 @@ class BlockOverlayManager @Inject constructor(
         packageName: String,
         untilText: String?,
         rule: OpenBlockRule?,
-        hasPartner: Boolean
+        hasPartner: Boolean,
+        group: GroupCache?
     ) {
         val service = serviceRef?.get()
         val (windowManager, windowType) = when {
@@ -184,8 +192,14 @@ class BlockOverlayManager @Inject constructor(
                     untilText = untilText,
                     rule = rule,
                     hasPartner = hasPartner,
+                    groupName = group?.name,
                     teaserController = teaserController,
                     askPartner = { accountabilityRepository.enqueueUnlockRequest(packageName, appName) },
+                    askGroup = {
+                        group?.let {
+                            accountabilityRepository.enqueueUnlockRequest(packageName, appName, groupId = it.groupId)
+                        }
+                    },
                     onTeaserStarted = ::cancelAutoDismiss,
                     onDismiss = { mainScope.launch { hideNow() } }
                 )
@@ -273,7 +287,8 @@ private sealed interface OverlayStage {
     data class Countdown(val difficulty: TeaserEngine.Difficulty) : OverlayStage
     data class Solving(val difficulty: TeaserEngine.Difficulty) : OverlayStage
     data class Granted(val minutes: Int) : OverlayStage
-    data object AskSent : OverlayStage
+    /** [target] names who was asked — "your partner" or the group's name. */
+    data class AskSent(val target: String) : OverlayStage
 }
 
 @Composable
@@ -283,8 +298,10 @@ private fun BlockOverlayRoot(
     untilText: String?,
     rule: OpenBlockRule?,
     hasPartner: Boolean,
+    groupName: String?,
     teaserController: TeaserController,
     askPartner: suspend () -> Unit,
+    askGroup: suspend () -> Unit,
     onTeaserStarted: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -303,6 +320,7 @@ private fun BlockOverlayRoot(
                 untilText = untilText,
                 showUnlock = rule != null,
                 showAskPartner = hasPartner,
+                askGroupName = groupName,
                 onDismiss = onDismiss,
                 onUnlock = {
                     if (rule != null) {
@@ -326,7 +344,17 @@ private fun BlockOverlayRoot(
                         } catch (_: Exception) {
                             // Outbox insert is local; a failure here is exceptional.
                         }
-                        stage = OverlayStage.AskSent
+                        stage = OverlayStage.AskSent("your partner")
+                    }
+                },
+                onAskGroup = {
+                    onTeaserStarted()
+                    scope.launch {
+                        try {
+                            askGroup()
+                        } catch (_: Exception) {
+                        }
+                        stage = OverlayStage.AskSent(groupName ?: "your group")
                     }
                 }
             )
@@ -342,13 +370,13 @@ private fun BlockOverlayRoot(
                     modifier = Modifier.padding(32.dp)
                 ) {
                     Text(
-                        text = "Request sent to your partner.",
+                        text = "Request sent to ${s.target}.",
                         style = MaterialTheme.typography.titleMedium,
                         color = TextPrimary
                     )
                     Text(
                         // Fail-closed, stated plainly: nothing unlocks until approval.
-                        text = "You'll get a notification when they respond. $appName stays blocked until then — if you're offline, the request goes out once you reconnect.",
+                        text = "You'll get a notification when someone responds. $appName stays blocked until then — if you're offline, the request goes out once you reconnect.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         textAlign = TextAlign.Center
@@ -406,9 +434,11 @@ private fun BlockedStage(
     untilText: String?,
     showUnlock: Boolean,
     showAskPartner: Boolean,
+    askGroupName: String?,
     onDismiss: () -> Unit,
     onUnlock: () -> Unit,
-    onAskPartner: () -> Unit
+    onAskPartner: () -> Unit,
+    onAskGroup: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -447,6 +477,11 @@ private fun BlockedStage(
         if (showAskPartner) {
             TextButton(onClick = onAskPartner) {
                 Text("Ask my partner to unlock", color = TextSecondary)
+            }
+        }
+        if (askGroupName != null) {
+            TextButton(onClick = onAskGroup) {
+                Text("Ask $askGroupName to unlock", color = TextSecondary)
             }
         }
         if (showUnlock) {
