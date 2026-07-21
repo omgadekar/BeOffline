@@ -132,6 +132,15 @@ class OpenBlockViewModel @Inject constructor(
 
     fun activateRule(rule: OpenBlockRule) {
         viewModelScope.launch {
+            // A lock can't actually block anything without the accessibility
+            // service, so don't let it be switched "on" until that's granted —
+            // otherwise it looks protected but isn't.
+            if (!backgroundProtectionManager.isAccessibilityServiceEnabled()) {
+                _uiState.update {
+                    it.copy(message = "Turn on App Lock protection first — it needs the accessibility permission to actually block apps.")
+                }
+                return@launch
+            }
             // Re-enabling a lock that was counting down to off → call off the
             // cooldown first, then re-arm normally.
             if (rule.disableEffectiveAt != null) cancelDisableInternal(rule.id)
@@ -157,7 +166,12 @@ class OpenBlockViewModel @Inject constructor(
             if (rule.disableEffectiveAt != null) return@launch
 
             val now = System.currentTimeMillis()
-            val enforcing = OpenBlockController.isEnforcingNow(rule, now)
+            // "Enforcing" for the cooldown means the lock is genuinely blocking:
+            // active, in-window, AND the accessibility engine is actually on.
+            // Without the permission there was no protection to bypass, so turning
+            // it off is instant and silent — no cooldown, no partner alert.
+            val enforcing = OpenBlockController.isEnforcingNow(rule, now) &&
+                backgroundProtectionManager.isAccessibilityServiceEnabled()
             val watched = accountabilityRepository.hasPartner() || accountabilityRepository.hasGroup()
 
             if (enforcing && watched) {
@@ -194,7 +208,8 @@ class OpenBlockViewModel @Inject constructor(
 
     fun deleteRule(rule: OpenBlockRule) {
         viewModelScope.launch {
-            val enforcing = OpenBlockController.isEnforcingNow(rule)
+            val enforcing = OpenBlockController.isEnforcingNow(rule) &&
+                backgroundProtectionManager.isAccessibilityServiceEnabled()
             val watched = accountabilityRepository.hasPartner() || accountabilityRepository.hasGroup()
             if (enforcing && watched) {
                 // Can't silently delete protection out from under an approver.
