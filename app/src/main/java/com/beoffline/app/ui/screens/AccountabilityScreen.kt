@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -82,6 +83,7 @@ fun AccountabilityScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.checkConfiguration(context) }
     LaunchedEffect(uiState.message) {
@@ -89,6 +91,32 @@ fun AccountabilityScreen(
             snackbar.showSnackbar(it)
             viewModel.dismissMessage()
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            containerColor = Brand800,
+            title = { Text("Delete your account?", color = TextPrimary) },
+            text = {
+                Text(
+                    "This permanently removes your account and all server data — pairings, groups, " +
+                        "requests, and chat messages. Your partners will be told. This can't be undone.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    viewModel.deleteAccount()
+                }) { Text("Delete", color = StatusDanger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -212,6 +240,16 @@ fun AccountabilityScreen(
                                 uiState.recentRequests.forEach { RecentRequestRow(it) }
                             }
                         }
+                    }
+                }
+
+                item {
+                    TextButton(
+                        onClick = { showDeleteConfirm = true },
+                        enabled = !uiState.busy,
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Text("Delete my account", color = StatusDanger)
                     }
                 }
 

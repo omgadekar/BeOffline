@@ -116,6 +116,24 @@ class AccountabilityRepository @Inject constructor(
         partnerDao.upsertAll(dtos.map { it.toEntity() })
     }
 
+    // ── Account ───────────────────────────────────────────────────────────────
+
+    /**
+     * Deletes the account server-side, then clears all local accountability
+     * state and signs out. Only touches local data on success — a failed server
+     * call leaves the account intact so the user can retry.
+     */
+    suspend fun deleteAccount() {
+        api.deleteAccount()
+        partnerDao.clear()
+        requestCacheDao.clearAll()
+        groupCacheDao.clear()
+        chatMessageDao.clearAll()
+        outboxDao.clearAll()
+        allowanceDao.deleteRemoteGrants()
+        FirebaseAuth.getInstance().signOut()
+    }
+
     // ── Groups (M4) ───────────────────────────────────────────────────────────
 
     suspend fun createGroup(name: String): GroupDto {

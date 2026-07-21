@@ -25,4 +25,8 @@ interface AllowanceDao {
 
     @Query("DELETE FROM allowances WHERE ruleId = :ruleId")
     suspend fun deleteForRule(ruleId: Int)
+
+    /** Remote (partner/group) grants use ruleId 0 — cleared on account deletion. */
+    @Query("DELETE FROM allowances WHERE ruleId = 0")
+    suspend fun deleteRemoteGrants()
 }

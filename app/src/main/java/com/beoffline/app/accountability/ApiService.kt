@@ -65,6 +65,10 @@ interface ApiService {
     @GET("api/requests")
     suspend fun listRequests(@Query("role") role: String): List<UnlockRequestDto>
 
+    // ── Account ───────────────────────────────────────────────────────────────
+    @DELETE("api/account")
+    suspend fun deleteAccount()
+
     // ── Devices / tamper ──────────────────────────────────────────────────────
     @PUT("api/devices")
     suspend fun registerDevice(@Body body: RegisterDeviceBody)

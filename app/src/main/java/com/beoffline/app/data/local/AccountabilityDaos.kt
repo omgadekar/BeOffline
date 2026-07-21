@@ -49,6 +49,9 @@ interface UnlockRequestCacheDao {
     /** Clears resolved history but keeps anything still in-flight (incoming to act on, or queued outgoing). */
     @Query("DELETE FROM unlock_request_cache WHERE status NOT IN ('Pending', 'Queued')")
     suspend fun clearResolved()
+
+    @Query("DELETE FROM unlock_request_cache")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -85,6 +88,9 @@ interface ChatMessageDao {
 
     @Query("DELETE FROM chat_messages WHERE sentAtUtc < :beforeMillis AND pending = 0")
     suspend fun pruneOlderThan(beforeMillis: Long)
+
+    @Query("DELETE FROM chat_messages")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -100,4 +106,7 @@ interface OutboxDao {
 
     @Query("UPDATE outbox_items SET attempts = attempts + 1 WHERE id = :id")
     suspend fun incrementAttempts(id: Int)
+
+    @Query("DELETE FROM outbox_items")
+    suspend fun clearAll()
 }

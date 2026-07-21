@@ -83,6 +83,15 @@ class AccountabilityViewModel @Inject constructor(
         _uiState.update { it.copy(inviteCode = null, message = null) }
     }
 
+    fun deleteAccount() = launchBusy {
+        try {
+            repository.deleteAccount() // signs out on success → UI returns to signed-out
+            _uiState.update { it.copy(inviteCode = null, message = "Your account and data were deleted.") }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(message = friendly(e)) }
+        }
+    }
+
     fun createInvite() = launchBusy {
         try {
             val invite = repository.createInvite()
