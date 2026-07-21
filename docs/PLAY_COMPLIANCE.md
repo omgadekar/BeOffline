@@ -15,22 +15,22 @@ Everything you need to submit the accountability + App Lock update for review, g
 | Accessibility prominent disclosure (runtime) | ✅ Built | Verify copy (below), mirror in Console |
 | `isAccessibilityTool` + minimal config | ✅ Built | Justification text (below) |
 | VpnService (local, no data leaves device) | ✅ OK | Declare in Console, keep privacy wording |
-| **In-app account deletion + deletion URL** | ❌ **Missing** | **Required — build before submit (§7)** |
-| **Privacy policy (hosted URL)** | ❌ **Missing** | **Required — publish page (§5)** |
+| **In-app account deletion + deletion URL** | ✅ Built | In-app button + `DELETE /api/account` + `/account-deletion` page; verify after deploy |
+| **Privacy policy (hosted URL)** | ✅ Built | Served at `/privacy`; **review the wording**, then use the deployed URL in Console |
 | Data Safety form | ⚠️ To complete | Use answers in §4 |
 | Permissions justifications | ⚠️ To complete | Use table in §6 |
 | Foreground service review | ⚠️ Likely | Justification in §6.1 |
 | Store listing framing | ⚠️ Rewrite | Copy in §8 |
 | Exact-alarm permission | ℹ️ Optional | See §6.2 |
 
-> **Two hard blockers:** (1) the account-deletion mechanism and (2) a hosted privacy policy. Play will reject an app that has account sign-in but no deletion path, and the Data Safety form requires a privacy-policy URL.
+> **Both former hard blockers are now built in code** (account deletion + privacy policy served by the API). Once the backend is redeployed they're live; the remaining work is Console forms + copy you must review.
 
 ---
 
 ## 1. Required action items (in order)
 
-1. **Build account deletion** — in-app ("Delete my account") **and** a public web URL that lets someone request deletion without installing the app. Delete/anonymize server rows for that UID. See §7 for the concrete plan.
-2. **Publish a privacy policy** at a stable URL (e.g. `https://beoffline-api.askthepolicy.com/privacy` or a page on your site). Content in §5.
+1. ~~Build account deletion~~ ✅ **Done in code.** In-app **Accountability → Delete my account** calls `DELETE /api/account` (purges all server rows for the UID, notifies partners, transfers/deletes owned groups). Public request page at `/account-deletion`. **After deploy:** verify the URL loads and put it in Console's *Data deletion* field.
+2. ~~Publish a privacy policy~~ ✅ **Served at `/privacy`.** **Review the wording** (and the contact email in `LegalPages.cs`, currently `gadekarom@gmail.com`), then use `https://beoffline-api.askthepolicy.com/privacy` in Console.
 3. **Complete the Data Safety form** using §4.
 4. **Fill the Accessibility & Permissions declarations** in Play Console using §2 and §6.
 5. **Rewrite the store listing** to wellbeing framing using §8 (avoid the banned words list).
@@ -196,18 +196,15 @@ The scheduler uses `setExactAndAllowWhileIdle` guarded by `canScheduleExactAlarm
 
 ---
 
-## 7. Account deletion (REQUIRED — not yet built)
+## 7. Account deletion (✅ BUILT)
 
-Play's account-deletion policy applies the moment an app offers account creation. BeOffline now has Google Sign-In, so this is mandatory:
+Implemented end to end:
 
-- **In-app:** a clearly reachable **Settings → Delete my account** that deletes the account and its server data.
-- **Web:** a URL where a user can request deletion **without** the app installed (link it in the store listing's "Data deletion" field and the privacy policy).
+- **In-app:** **Accountability → Delete my account** (red button + confirmation dialog) → `AccountabilityRepository.deleteAccount()` calls the API, then clears local caches and signs out of Firebase. Only touches local state on a successful server delete.
+- **Server:** `DELETE /api/account` (`AccountController`) purges, in one transaction, every row for the caller's UID — `Users`, `Devices`, `Pairings`, `GroupMembers`, `UnlockRequests` + `RequestApprovals`, `Allowances`, `TamperEvents`, `ChatMessages`, `InviteCodes`/`GroupInviteCodes` they issued — notifies partners and group co-members first, and **transfers ownership of any group they own** to the longest-standing member (deleting the group only if they were the last one). Idempotent (204 if already gone). Covered by tests.
+- **Web:** `/account-deletion` page describes the in-app path and an email fallback.
 
-**Server side (small):** add `DELETE /api/account` that, for the caller's UID, removes/anonymizes: `Users`, `Devices`, `Pairings` (and notifies partners), `GroupMembers`, `UnlockRequests`/`RequestApprovals`, `Allowances`, `TamperEvents`, `ChatMessages` authored by them, `InviteCodes` they issued. Keep it idempotent.
-
-**Client side:** a "Delete my account" button on the Accountability screen that calls it, signs out of Firebase, and clears the local Room caches.
-
-> This is the one remaining piece of *code* before submission. Say the word and I'll implement the endpoint + UI (it's roughly a half-day and mirrors the existing patterns).
+**Console:** put `https://beoffline-api.askthepolicy.com/account-deletion` in the *Data deletion* field once deployed.
 
 ---
 
@@ -254,8 +251,10 @@ Play's account-deletion policy applies the moment an app offers account creation
 
 ## 10. Pre-submission checklist
 
-- [ ] Account deletion shipped (in-app + web URL) — §7
-- [ ] Privacy policy live at a stable URL — §5
+- [x] Account deletion shipped (in-app + web URL) — §7 *(code done; verify after deploy)*
+- [x] Privacy policy served at a stable URL — §5 *(review wording; live after deploy)*
+- [ ] **Redeploy the backend** so `/privacy`, `/account-deletion`, and `DELETE /api/account` are live
+- [ ] Review privacy-policy/deletion copy + contact email (`LegalPages.cs`)
 - [ ] Data Safety form completed — §4
 - [ ] Accessibility declaration + demo video — §2
 - [ ] VpnService declaration — §3

@@ -101,6 +101,10 @@ app.MapControllers();
 app.MapHub<AccountabilityHub>("/hubs/accountability");
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
+// Public legal pages (required by Play — reachable without the app).
+app.MapGet("/privacy", () => Results.Content(BeOffline.Api.Legal.LegalPages.PrivacyPolicy, "text/html"));
+app.MapGet("/account-deletion", () => Results.Content(BeOffline.Api.Legal.LegalPages.AccountDeletion, "text/html"));
+
 app.Run();
 
 /// <summary>Exposed for WebApplicationFactory in integration tests.</summary>
