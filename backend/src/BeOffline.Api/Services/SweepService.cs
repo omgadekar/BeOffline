@@ -125,11 +125,26 @@ public sealed class SweepService(IServiceScopeFactory scopeFactory, IConfigurati
             }
         }
 
-        // 3. Hourly: uninstall inference from silent heartbeats.
+        // 3. Hourly: uninstall inference from silent heartbeats + log retention.
         if (now - _lastHeartbeatSweepUtc >= TimeSpan.FromHours(1))
         {
             _lastHeartbeatSweepUtc = now;
             await SweepSilentUsersAsync(db, notifier, now, ct);
+            await PruneLogsAsync(db, now, ct);
+        }
+    }
+
+    private async Task PruneLogsAsync(AppDbContext db, DateTime now, CancellationToken ct)
+    {
+        var cutoff = now - TimeSpan.FromDays(config.GetValue("Logging:RetentionDays", 30));
+        try
+        {
+            await db.ActivityLogs.Where(l => l.TimestampUtc < cutoff).ExecuteDeleteAsync(ct);
+            await db.ErrorLogs.Where(l => l.TimestampUtc < cutoff).ExecuteDeleteAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Log retention prune failed");
         }
     }
 

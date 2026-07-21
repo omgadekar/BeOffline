@@ -17,6 +17,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<RequestApproval> RequestApprovals => Set<RequestApproval>();
     public DbSet<AllowanceRecord> Allowances => Set<AllowanceRecord>();
     public DbSet<TamperEvent> TamperEvents => Set<TamperEvent>();
+    public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
+    public DbSet<ErrorLog> ErrorLogs => Set<ErrorLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -95,6 +97,24 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             e.HasIndex(x => new { x.Uid, x.ClientEventId }).IsUnique();
             e.HasIndex(x => x.Uid);
+        });
+
+        b.Entity<ActivityLog>(e =>
+        {
+            e.HasIndex(x => x.TimestampUtc);
+            e.HasIndex(x => x.Uid);
+            e.Property(x => x.Uid).HasMaxLength(128);
+            e.Property(x => x.Method).HasMaxLength(16);
+            e.Property(x => x.Path).HasMaxLength(512);
+        });
+
+        b.Entity<ErrorLog>(e =>
+        {
+            e.HasIndex(x => x.TimestampUtc);
+            e.Property(x => x.Uid).HasMaxLength(128);
+            e.Property(x => x.Method).HasMaxLength(16);
+            e.Property(x => x.Path).HasMaxLength(512);
+            e.Property(x => x.ExceptionType).HasMaxLength(256);
         });
     }
 }

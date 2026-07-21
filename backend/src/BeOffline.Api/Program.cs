@@ -1,6 +1,7 @@
 using BeOffline.Api.Auth;
 using BeOffline.Api.Data;
 using BeOffline.Api.Hubs;
+using BeOffline.Api.Logging;
 using BeOffline.Api.Services;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
@@ -85,6 +86,12 @@ if (!isTesting && app.Configuration.GetValue("Database:AutoMigrate", true))
     using var scope = app.Services.CreateScope();
     scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
 }
+
+// Operational logging wraps everything: activity is outermost (logs the final
+// status in a finally), error logging sits just inside it (turns unhandled
+// exceptions into a logged 500 that activity still records).
+app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseMiddleware<ErrorLoggingMiddleware>();
 
 app.UseAuthentication();
 app.UseMiddleware<UserProvisioningMiddleware>();

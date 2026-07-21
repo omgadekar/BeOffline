@@ -55,21 +55,19 @@ public sealed class PairingController(AppDbContext db, INotificationService noti
         if (invite.IssuerUid == uid)
             return BadRequest(new { message = "You cannot pair with yourself." });
 
-        var alreadyPaired = await db.Pairings.AnyAsync(p =>
-            p.Status == PairingStatus.Active &&
-            ((p.UserAUid == invite.IssuerUid && p.UserBUid == uid) ||
-             (p.UserAUid == uid && p.UserBUid == invite.IssuerUid)));
-        if (alreadyPaired)
-            return Conflict(new { message = "You are already paired with this person." });
+        // One 1:1 partner at a time, per side. A pairing in its removal cooldown
+        // still counts as Active, so you can't line up a replacement until the
+        // current partner is fully gone (this is the anti-puppet guard). To
+        // involve several people at once, use a Group instead.
+        var accepterHasPartner = await db.Pairings.AnyAsync(p =>
+            p.Status == PairingStatus.Active && (p.UserAUid == uid || p.UserBUid == uid));
+        if (accepterHasPartner)
+            return Conflict(new { message = "You already have an accountability partner. Remove them first, or use a Group for several people." });
 
-        // Anti-puppet rule: if either party already has a pairing (active OR in
-        // removal cooldown), the NEW pairing cannot approve until its own
-        // cooldown passes. First-ever pairing activates immediately.
-        var eitherHasExisting = await db.Pairings.AnyAsync(p =>
-            p.Status == PairingStatus.Active &&
-            (p.UserAUid == invite.IssuerUid || p.UserBUid == invite.IssuerUid ||
-             p.UserAUid == uid || p.UserBUid == uid));
-        var activationCooldownHours = config.GetValue("Accountability:ApproverActivationCooldownHours", 24);
+        var issuerHasPartner = await db.Pairings.AnyAsync(p =>
+            p.Status == PairingStatus.Active && (p.UserAUid == invite.IssuerUid || p.UserBUid == invite.IssuerUid));
+        if (issuerHasPartner)
+            return Conflict(new { message = "This person already has an accountability partner." });
 
         invite.ConsumedByUid = uid;
         var pairing = new Pairing
@@ -79,7 +77,9 @@ public sealed class PairingController(AppDbContext db, INotificationService noti
             UserBUid = uid,
             Status = PairingStatus.Active,
             CreatedAtUtc = now,
-            CanApproveAfterUtc = eitherHasExisting ? now.AddHours(activationCooldownHours) : now
+            // Neither side had a partner (enforced above), so this is a genuine
+            // first pairing for both → approval works immediately.
+            CanApproveAfterUtc = now
         };
         db.Pairings.Add(pairing);
         await db.SaveChangesAsync();

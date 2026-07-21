@@ -54,26 +54,30 @@ public sealed class PairingFlowTests : IClassFixture<TestAppFactory>
     }
 
     [Fact]
-    public async Task SecondPairing_getsAntiPuppetApprovalCooldown()
+    public async Task SecondPartner_isRejected_onlyOnePairingAllowed()
     {
         var dave = _factory.ClientFor("dave1");
         var erin = _factory.ClientFor("erin1");
         var frank = _factory.ClientFor("frank1");
+        var gwen = _factory.ClientFor("gwen1");
 
-        // First pairing: dave + erin — immediate.
+        // First pairing: dave + erin.
         var invite1 = await (await dave.PostAsync("/api/pairing/invites", null))
             .Content.ReadFromJsonAsync<CreateInviteResponse>();
         (await erin.PostAsJsonAsync("/api/pairing/invites/accept", new AcceptInviteRequest(invite1!.Code)))
             .EnsureSuccessStatusCode();
 
-        // Second pairing: dave + frank — dave already has one → cooldown applies.
+        // Issuer already has a partner: frank accepting dave's new invite is rejected.
         var invite2 = await (await dave.PostAsync("/api/pairing/invites", null))
             .Content.ReadFromJsonAsync<CreateInviteResponse>();
-        var pairing2 = await (await frank.PostAsJsonAsync("/api/pairing/invites/accept", new AcceptInviteRequest(invite2!.Code)))
-            .Content.ReadFromJsonAsync<PairingDto>();
+        var frankAccept = await frank.PostAsJsonAsync("/api/pairing/invites/accept", new AcceptInviteRequest(invite2!.Code));
+        Assert.Equal(HttpStatusCode.Conflict, frankAccept.StatusCode);
 
-        Assert.True(pairing2!.CanApproveAfterUtc > DateTime.UtcNow.AddHours(12),
-            "a pairing added alongside an existing one must not be able to approve immediately");
+        // Accepter already has a partner: erin can't accept gwen's invite either.
+        var invite3 = await (await gwen.PostAsync("/api/pairing/invites", null))
+            .Content.ReadFromJsonAsync<CreateInviteResponse>();
+        var erinAccept = await erin.PostAsJsonAsync("/api/pairing/invites/accept", new AcceptInviteRequest(invite3!.Code));
+        Assert.Equal(HttpStatusCode.Conflict, erinAccept.StatusCode);
     }
 
     [Fact]

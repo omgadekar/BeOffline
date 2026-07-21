@@ -211,3 +211,34 @@ public sealed class TamperEvent
     public DateTime OccurredAtUtc { get; set; }
     public DateTime ReportedAtUtc { get; set; }
 }
+
+/// <summary>
+/// One row per handled HTTP request (operational logging). Deliberately stores
+/// metadata only — never request/response bodies, auth headers, or tokens — so
+/// the log itself introduces no new sensitive-data surface.
+/// </summary>
+public sealed class ActivityLog
+{
+    public long Id { get; set; }
+    /// <summary>Firebase UID if the caller was authenticated; null otherwise.</summary>
+    public string? Uid { get; set; }
+    public required string Method { get; set; }
+    public required string Path { get; set; }
+    public int StatusCode { get; set; }
+    public long DurationMs { get; set; }
+    public string? IpAddress { get; set; }
+    public DateTime TimestampUtc { get; set; }
+}
+
+/// <summary>One row per unhandled exception that reached the pipeline.</summary>
+public sealed class ErrorLog
+{
+    public long Id { get; set; }
+    public string? Uid { get; set; }
+    public string? Method { get; set; }
+    public string? Path { get; set; }
+    public required string Message { get; set; }
+    public string? ExceptionType { get; set; }
+    public string? StackTrace { get; set; }
+    public DateTime TimestampUtc { get; set; }
+}

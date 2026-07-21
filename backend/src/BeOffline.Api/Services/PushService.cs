@@ -26,6 +26,17 @@ public sealed class FcmPushService(IServiceScopeFactory scopeFactory, ILogger<Fc
             .ToListAsync(ct);
         if (tokens.Count == 0) return;
 
+        // DATA-ONLY on purpose (no Notification field): a message carrying a
+        // Notification is routed to the system tray when the app is backgrounded
+        // and the client's onMessageReceived does NOT run until the user taps it.
+        // The client must act on every event in the background — insert an
+        // allowance to lift a block, refresh caches — and it posts its own
+        // notification (with deep-link routing). title/body ride along in data
+        // so the client can render them. High priority wakes the app in Doze.
+        var payload = data.ToDictionary(kv => kv.Key, kv => kv.Value);
+        payload["title"] = title;
+        payload["body"] = body;
+
         // FirebaseAdmin marks Token obsolete in favor of FIDs, but registration
         // tokens are what the Android client registers and remain fully
         // supported by FCM — revisit if/when the client moves to FIDs.
@@ -33,8 +44,7 @@ public sealed class FcmPushService(IServiceScopeFactory scopeFactory, ILogger<Fc
         var messages = tokens.Select(token => new Message
         {
             Token = token,
-            Notification = new Notification { Title = title, Body = body },
-            Data = data.ToDictionary(kv => kv.Key, kv => kv.Value),
+            Data = new Dictionary<string, string>(payload),
             Android = new AndroidConfig { Priority = Priority.High }
         }).ToList();
 #pragma warning restore CS0618
