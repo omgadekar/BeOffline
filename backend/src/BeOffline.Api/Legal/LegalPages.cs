@@ -98,8 +98,19 @@ public static class LegalPages
         <h2>What gets deleted</h2>
         <p>Your account (name, email, user ID), device push tokens, accountability pairings and group
         memberships, unlock requests and approvals, temporary allowances, protection-status events, and
-        chat messages you sent. Data that other users authored (e.g. their own messages) is not affected.
-        Anonymous crash diagnostics are managed by Firebase Crashlytics.</p>
+        chat messages you sent. Deletion is immediate and permanent; there is no recovery period.</p>
+
+        <h2>What is kept, and for how long</h2>
+        <ul>
+          <li><strong>Content other people created</strong> (e.g. their own chat messages, or requests
+          they sent you) is not deleted, as it belongs to those users.</li>
+          <li><strong>Operational request logs</strong> (method, path, timestamp — not message content)
+          are retained for up to <strong>30 days</strong> for security and debugging, then purged, and
+          are not linked to your account after deletion.</li>
+          <li><strong>Anonymous crash diagnostics</strong> are managed by Firebase Crashlytics per
+          Google's retention policy and are not tied to your account.</li>
+          <li>Any operational backups are rotated and purged within <strong>30 days</strong>.</li>
+        </ul>
 
         <p class="muted">Questions? <a href="mailto:{ContactEmail}">{ContactEmail}</a> · See our
         <a href="/privacy">Privacy Policy</a>.</p>

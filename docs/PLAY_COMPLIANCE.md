@@ -13,7 +13,7 @@ Everything you need to submit the accountability + App Lock update for review, g
 | Area | State | What's needed |
 |---|---|---|
 | Accessibility prominent disclosure (runtime) | ✅ Built | Verify copy (below), mirror in Console |
-| `isAccessibilityTool` + minimal config | ✅ Built | Justification text (below) |
+| `isAccessibilityTool="false"` (non-accessibility use) | ✅ Set | Do NOT fill the disability form; use the §2 justification |
 | VpnService (local, no data leaves device) | ✅ OK | Declare in Console, keep privacy wording |
 | **In-app account deletion + deletion URL** | ✅ Built | In-app button + `DELETE /api/account` + `/account-deletion` page; verify after deploy |
 | **Privacy policy (hosted URL)** | ✅ Built | Served at `/privacy`; **review the wording**, then use the deployed URL in Console |
@@ -40,12 +40,16 @@ Everything you need to submit the accountability + App Lock update for review, g
 
 ## 2. Accessibility API compliance
 
-Play scrutinises AccessibilityService use heavily (enforcement tightened for 2026). BeOffline's use is a legitimate **self-control / digital-wellbeing** case, and the app is already built to satisfy the requirements.
+Play scrutinises AccessibilityService use heavily (enforcement tightened for 2026). BeOffline's App Lock uses the API for a **non-accessibility purpose** — detecting the foreground app so the user can block *themselves* during focus sessions.
+
+> **⚠️ Decision: `isAccessibilityTool="false"` (Option A).** The `true` value is a formal declaration that the app is a **tool for people with disabilities** — the Play Console then makes you name the disability served and the disabled target users. BeOffline is a general digital-wellbeing app and does **not** serve a disability, so declaring `true` would be a misrepresentation (rejection / account-flag risk). We therefore declare `false` and take the standard non-accessibility justification route below. Set in `res/xml/accessibility_service_config.xml`.
 
 **What the app declares** (`res/xml/accessibility_service_config.xml`):
 - `accessibilityEventTypes="typeWindowStateChanged"` — foreground-app changes only.
 - `canRetrieveWindowContent="false"` — never reads screen content.
-- `isAccessibilityTool="true"` — this is a self-imposed control tool on the user's own device.
+- `isAccessibilityTool="false"` — a legitimate non-accessibility use, not a disability aid.
+
+**Functional cost of `false` (small):** users may see occasional "app is using accessibility" reminders; users who enable Android **Advanced Protection Mode** (opt-in, rare) may have the service disabled — the engine then degrades and the app shows protection is off (`UsageStatsManager` is the intended fallback there). Detection/blocking are otherwise unchanged.
 
 **Runtime prominent disclosure** (already implemented as `AccessibilityDisclosureScreen`, shown *before* the grant). Confirm it states, in the user's face, before enabling:
 
@@ -56,11 +60,15 @@ Play scrutinises AccessibilityService use heavily (enforcement tightened for 202
 > You can turn this off any time in Settings → Accessibility.
 > [ I understand — enable ]
 
-**Play Console → Policy → App content → "Accessibility" / permissions declaration.** Paste this justification:
+**Play Console — AccessibilityService justification** (App content / the permission-declaration prompt for the accessibility service). Paste this (~500 chars, honest, no disability claim):
 
-> BeOffline is a digital-wellbeing app. Its App Lock feature helps a user stop themselves from opening apps they chose to restrict during focus sessions. The accessibility service is used solely to detect which app is in the foreground so the app can display its own block screen. It subscribes only to window-state-changed events, does not retrieve window content, does not capture keystrokes or personal content, and transmits nothing off the device. `isAccessibilityTool` is set to true because the sole purpose is to help the user manage their own app usage on their own device. There is no less-invasive API that provides reliable, immediate foreground-app detection for this purpose.
+> BeOffline is a digital-wellbeing app. Its App Lock feature lets users stop themselves from opening apps they chose to restrict during focus sessions they set. The AccessibilityService is used only to detect which app is in the foreground, so the app can show its own block screen. It subscribes only to window-state-changed events, does not read window content, does not capture keystrokes or any personal content, and transmits nothing off the device. Users see a prominent disclosure and must explicitly enable it, and can disable it any time.
 
-**Video for review:** record a short screen capture showing the disclosure screen → enabling the service → a blocked app being intercepted. Reviewers usually ask for this; attach it proactively.
+**Do NOT** complete the "Accessibility services" (disability) declaration form — that only applies to `isAccessibilityTool="true"`. With `false`, you should not see it; if you do, it means the flag didn't update in the uploaded build.
+
+**Video for review (required):** record a short screen capture showing the disclosure screen → enabling the service in Settings → opening a blocked app and being sent to the block screen. Attach it proactively.
+
+**If Google still rejects the accessibility use:** the App Lock feature can switch foreground detection to **`UsageStatsManager`** (laggier, no forced send-home, but avoids the accessibility policy entirely), or ship this update with VPN + accountability and hold App Lock. The existing VPN internet-block feature is unaffected by any of this.
 
 ---
 
