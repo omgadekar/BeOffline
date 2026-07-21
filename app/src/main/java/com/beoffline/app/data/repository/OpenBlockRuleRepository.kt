@@ -28,7 +28,15 @@ class OpenBlockRuleRepository @Inject constructor(
     suspend fun deleteRule(rule: OpenBlockRule) = dao.deleteRule(rule)
     suspend fun setRuleActive(id: Int, active: Boolean) = dao.setRuleActive(id, active)
     suspend fun setTimerStartedAt(id: Int, startedAt: Long?) = dao.setTimerStartedAt(id, startedAt)
+    suspend fun setDisableEffectiveAt(id: Int, effectiveAt: Long?) = dao.setDisableEffectiveAt(id, effectiveAt)
     suspend fun deactivateAllRules() = dao.deactivateAllRules()
+
+    /** Finalizes a pending-disable cooldown: the lock is now fully off. */
+    suspend fun finalizeDisable(id: Int) {
+        dao.setDisableEffectiveAt(id, null)
+        dao.setTimerStartedAt(id, null)
+        dao.setRuleActive(id, false)
+    }
 
     /**
      * Returns all currently open-blocked packages as a flat list.

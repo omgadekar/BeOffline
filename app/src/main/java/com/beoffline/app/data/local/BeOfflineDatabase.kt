@@ -21,7 +21,7 @@ import com.beoffline.app.data.model.SoloTeaserState
         Partner::class, CachedUnlockRequest::class, OutboxItem::class,
         GroupCache::class, ChatMessageCache::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -166,6 +166,17 @@ abstract class BeOfflineDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `unlock_request_cache` ADD COLUMN `groupId` TEXT")
                 db.execSQL("ALTER TABLE `unlock_request_cache` ADD COLUMN `groupName` TEXT")
                 db.execSQL("ALTER TABLE `unlock_request_cache` ADD COLUMN `resolvedByName` TEXT")
+            }
+        }
+
+        /**
+         * v5 → v6: disable-cooldown for App Locks (accountability). Adds one
+         * nullable column so turning off an actively-enforcing lock can be
+         * delayed and made visible to a partner. Additive; must match schemas/6.json.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `open_block_rules` ADD COLUMN `disableEffectiveAt` INTEGER")
             }
         }
     }

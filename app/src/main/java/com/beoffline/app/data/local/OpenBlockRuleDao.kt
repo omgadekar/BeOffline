@@ -49,4 +49,9 @@ interface OpenBlockRuleDao {
 
     @Query("UPDATE open_block_rules SET timerStartedAt = :startedAt WHERE id = :id")
     suspend fun setTimerStartedAt(id: Int, startedAt: Long?)
+
+    // ── Disable cooldown (accountability) ──────────────────────────────────────
+
+    @Query("UPDATE open_block_rules SET disableEffectiveAt = :effectiveAt WHERE id = :id")
+    suspend fun setDisableEffectiveAt(id: Int, effectiveAt: Long?)
 }

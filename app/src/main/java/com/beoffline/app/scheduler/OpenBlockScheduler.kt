@@ -99,6 +99,27 @@ object OpenBlockScheduler {
         cancelTimerStopAlarm(context, ruleId)
     }
 
+    // ── Disable cooldown (accountability) ──────────────────────────────────────
+    // WorkManager (not an alarm) so the finalize survives reboot without a boot
+    // receiver. Correctness doesn't depend on it firing on time — enforcement
+    // already treats the rule as off once its cooldown elapses; this just
+    // persists isActive=false and tears the schedule down.
+
+    fun scheduleDisableFinalize(context: Context, ruleId: Int, delayMillis: Long) {
+        val work = OneTimeWorkRequestBuilder<FinalizeOpenBlockDisableWorker>()
+            .setInitialDelay(delayMillis.coerceAtLeast(0), TimeUnit.MILLISECONDS)
+            .setInputData(workDataOf(FinalizeOpenBlockDisableWorker.KEY_RULE_ID to ruleId))
+            .build()
+        WorkManager.getInstance(context)
+            .enqueueUniqueWork(disableWorkName(ruleId), ExistingWorkPolicy.REPLACE, work)
+    }
+
+    fun cancelDisableFinalize(context: Context, ruleId: Int) {
+        WorkManager.getInstance(context).cancelUniqueWork(disableWorkName(ruleId))
+    }
+
+    private fun disableWorkName(ruleId: Int) = "open_rule_disable_finalize_$ruleId"
+
     private fun stopWorkTag(ruleId: Int) = "open_rule_stop_$ruleId"
 
     private fun scheduleAlarm(context: Context, ruleId: Int, action: String, triggerAtMillis: Long) {
@@ -187,6 +208,35 @@ class StopOpenBlockRuleWorker @AssistedInject constructor(
 
         repository.setRuleActive(ruleId, false)
         repository.setTimerStartedAt(ruleId, null)
+        return Result.success()
+    }
+}
+
+/**
+ * Finalizes a disable-cooldown: flips the lock fully off and tears down its
+ * schedule. Skips if the cooldown was cancelled in the meantime (the row's
+ * disableEffectiveAt is back to null), so a stale worker can't force a lock off.
+ */
+@HiltWorker
+class FinalizeOpenBlockDisableWorker @AssistedInject constructor(
+    @Assisted context: Context,
+    @Assisted params: WorkerParameters,
+    private val repository: OpenBlockRuleRepository
+) : CoroutineWorker(context, params) {
+
+    companion object {
+        const val KEY_RULE_ID = "rule_id"
+    }
+
+    override suspend fun doWork(): Result {
+        val ruleId = inputData.getInt(KEY_RULE_ID, -1)
+        if (ruleId == -1) return Result.failure()
+
+        val rule = repository.getRuleById(ruleId)
+        if (rule?.disableEffectiveAt == null) return Result.success() // cancelled/finalized already
+
+        repository.finalizeDisable(ruleId)
+        OpenBlockScheduler.cancelRule(applicationContext, ruleId)
         return Result.success()
     }
 }

@@ -132,7 +132,7 @@ class MigrationTest {
     }
 
     @Test
-    fun migrate1To5_fullChain_preservesRules_andCreatesM3M4Tables() {
+    fun migrate1To6_fullChain_preservesRules_andCreatesM3M4Tables() {
         helper.createDatabase(dbName, 1).apply {
             execSQL(
                 "INSERT INTO block_rules " +
@@ -145,12 +145,14 @@ class MigrationTest {
         }
 
         // The exact chain a v1 production install walks on upgrade to this build
-        // (runMigrationsAndValidate diffs the end state against schemas/5.json —
-        // including the ALTER TABLE columns M4 adds to unlock_request_cache).
+        // (runMigrationsAndValidate diffs the end state against schemas/6.json —
+        // including the M4 columns on unlock_request_cache and the v6
+        // disableEffectiveAt column on open_block_rules).
         val db = helper.runMigrationsAndValidate(
-            dbName, 5, true,
+            dbName, 6, true,
             BeOfflineDatabase.MIGRATION_1_2, BeOfflineDatabase.MIGRATION_2_3,
-            BeOfflineDatabase.MIGRATION_3_4, BeOfflineDatabase.MIGRATION_4_5
+            BeOfflineDatabase.MIGRATION_3_4, BeOfflineDatabase.MIGRATION_4_5,
+            BeOfflineDatabase.MIGRATION_5_6
         )
 
         db.query("SELECT name FROM block_rules").use { c ->
@@ -183,6 +185,16 @@ class MigrationTest {
         db.query("SELECT body FROM chat_messages WHERE conversationKey = 'group:g1'").use { c ->
             assertTrue(c.moveToFirst())
             assertEquals("hello", c.getString(0))
+        }
+
+        // v6: the disable-cooldown column exists on open_block_rules and round-trips.
+        db.execSQL(
+            "INSERT INTO open_block_rules (name, blockedPackages, ruleType, isActive, disableEffectiveAt, createdAt) " +
+                "VALUES ('Deep Work', '[\"com.instagram.android\"]', 'PERMANENT', 1, 1721003600000, 1721000000002)"
+        )
+        db.query("SELECT disableEffectiveAt FROM open_block_rules WHERE name = 'Deep Work'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(1721003600000L, c.getLong(0))
         }
     }
 }

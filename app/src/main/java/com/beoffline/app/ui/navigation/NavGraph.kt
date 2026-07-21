@@ -1,11 +1,16 @@
 package com.beoffline.app.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import com.beoffline.app.ui.screens.AccessibilityDisclosureScreen
 import com.beoffline.app.ui.screens.AccountabilityScreen
 import com.beoffline.app.ui.screens.AppPickerScreen
@@ -48,8 +53,21 @@ sealed class Screen(val route: String) {
 }
 
 @Composable
-fun BeOfflineNavGraph(onRequestVpn: (List<String>) -> Unit) {
+fun BeOfflineNavGraph(
+    onRequestVpn: (List<String>) -> Unit,
+    navRoute: StateFlow<String?> = MutableStateFlow(null),
+    onNavRouteHandled: () -> Unit = {}
+) {
     val navController = rememberNavController()
+
+    // Notification deep-link: navigate once to the requested route, then clear it
+    // so rotation/recomposition doesn't re-trigger the jump.
+    val route by navRoute.collectAsState()
+    LaunchedEffect(route) {
+        val target = route ?: return@LaunchedEffect
+        navController.navigate(target) { launchSingleTop = true }
+        onNavRouteHandled()
+    }
 
     NavHost(
         navController = navController,

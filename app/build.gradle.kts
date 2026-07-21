@@ -38,7 +38,7 @@ android {
             // resolve, so a forgotten edit fails loudly, not silently.
             buildConfigField(
                 "String", "ACCOUNTABILITY_API_BASE_URL",
-                "\"https://beoffline-api.invalid/\""
+                "\"https://beoffline-api.askthepolicy.com/\""   // trailing slash required
             )
         }
         debug {

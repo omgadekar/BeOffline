@@ -122,6 +122,8 @@ class AccountabilityViewModel @Inject constructor(
 
     fun refresh() = viewModelScope.launch { refreshQuietly() }
 
+    fun clearRecent() = viewModelScope.launch { repository.clearRequestHistory() }
+
     fun dismissMessage() = _uiState.update { it.copy(message = null) }
 
     private suspend fun refreshQuietly() {

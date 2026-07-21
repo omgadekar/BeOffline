@@ -43,4 +43,22 @@ class OpenBlockControllerTest {
         val enforced = OpenBlockController.enforcedPackages(listOf(rule), listOf(allowance), 2_001L)
         assertTrue("expired allowance must re-block", "com.a" in enforced)
     }
+
+    @Test
+    fun pendingDisable_inFuture_stillEnforces() {
+        // During the disable cooldown the lock must keep blocking.
+        val disabling = rule.copy(disableEffectiveAt = 5_000L)
+        val enforced = OpenBlockController.enforcedPackages(listOf(disabling), emptyList(), 1_000L)
+        assertEquals(setOf("com.a", "com.b"), enforced)
+        assertTrue(OpenBlockController.isEnforcingNow(disabling, 1_000L))
+    }
+
+    @Test
+    fun pendingDisable_elapsed_stopsEnforcing() {
+        // Once the cooldown passes the lock is effectively off — no alarm needed.
+        val disabling = rule.copy(disableEffectiveAt = 1_000L)
+        val enforced = OpenBlockController.enforcedPackages(listOf(disabling), emptyList(), 2_000L)
+        assertTrue("elapsed disable must lift the block", enforced.isEmpty())
+        assertFalse(OpenBlockController.isEnforcingNow(disabling, 2_000L))
+    }
 }

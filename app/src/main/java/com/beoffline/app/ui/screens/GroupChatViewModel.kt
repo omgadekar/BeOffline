@@ -29,10 +29,16 @@ class GroupChatViewModel @Inject constructor(
     private val _groupName = MutableStateFlow("Group chat")
     val groupName: StateFlow<String> = _groupName.asStateFlow()
 
+    private val _memberCount = MutableStateFlow(0)
+    val memberCount: StateFlow<Int> = _memberCount.asStateFlow()
+
     init {
         viewModelScope.launch {
             repository.groups.collect { groups ->
-                groups.firstOrNull { it.groupId == groupId }?.let { _groupName.value = it.name }
+                groups.firstOrNull { it.groupId == groupId }?.let {
+                    _groupName.value = it.name
+                    _memberCount.value = repository.membersOf(it).size
+                }
             }
         }
         refresh()

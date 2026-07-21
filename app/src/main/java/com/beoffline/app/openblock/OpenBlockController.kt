@@ -54,13 +54,24 @@ class OpenBlockController @Inject constructor(
                 .map { it.packageName }
                 .toSet()
             return activeRules
-                .filter { rule ->
-                    rule.ruleType != RuleType.SCHEDULED ||
-                        RuleScheduler.isWithinScheduledWindow(rule, nowMillis)
-                }
+                .filter { rule -> isEnforcingNow(rule, nowMillis) }
                 .flatMap { it.blockedPackages }
                 .filter { it !in allowed }
                 .toSet()
+        }
+
+        /**
+         * Is this rule actively blocking right now — i.e. would opening one of
+         * its apps be stopped? True when the rule is active, its disable
+         * cooldown (if any) has not yet elapsed, and — for SCHEDULED rules — we
+         * are inside the window. Allowances are handled separately by the caller.
+         */
+        fun isEnforcingNow(rule: OpenBlockRule, nowMillis: Long = System.currentTimeMillis()): Boolean {
+            if (!rule.isActive) return false
+            // Pending-disable cooldown: still enforcing until it elapses, then off.
+            if (rule.disableEffectiveAt != null && rule.disableEffectiveAt <= nowMillis) return false
+            return rule.ruleType != RuleType.SCHEDULED ||
+                RuleScheduler.isWithinScheduledWindow(rule, nowMillis)
         }
 
         /**

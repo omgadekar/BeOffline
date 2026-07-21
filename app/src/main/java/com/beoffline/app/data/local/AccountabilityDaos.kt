@@ -45,6 +45,10 @@ interface UnlockRequestCacheDao {
 
     @Query("DELETE FROM unlock_request_cache WHERE requestedAtUtc < :beforeMillis")
     suspend fun pruneOlderThan(beforeMillis: Long)
+
+    /** Clears resolved history but keeps anything still in-flight (incoming to act on, or queued outgoing). */
+    @Query("DELETE FROM unlock_request_cache WHERE status NOT IN ('Pending', 'Queued')")
+    suspend fun clearResolved()
 }
 
 @Dao

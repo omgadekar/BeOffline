@@ -63,7 +63,13 @@ class AccountabilityRepository @Inject constructor(
         private const val OUTBOX_TAMPER = "TAMPER_EVENT"
         private const val OUTBOX_CHAT = "CHAT_MESSAGE"
 
+        /** Notification → NavGraph deep-link. Read by MainActivity. */
+        const val EXTRA_NAV_ROUTE = "beoffline.nav_route"
+        const val ROUTE_ACCOUNTABILITY = "accountability"
+        const val ROUTE_GROUPS = "groups"
+
         fun conversationKeyFor(groupId: String) = "group:$groupId"
+        fun groupChatRoute(groupId: String) = "group_chat/$groupId"
     }
 
     private val gson = Gson()
@@ -223,6 +229,9 @@ class AccountabilityRepository @Inject constructor(
         requestCacheDao.upsert(dto.toEntity(direction = "INCOMING"))
     }
 
+    /** Clears resolved request history (keeps active incoming / queued outgoing). */
+    suspend fun clearRequestHistory() = requestCacheDao.clearResolved()
+
     suspend fun refreshRequests() {
         val outgoing = api.listRequests("outgoing").map { it.toEntity("OUTGOING") }
         val incoming = api.listRequests("incoming").map { it.toEntity("INCOMING") }
@@ -327,7 +336,8 @@ class AccountabilityRepository @Inject constructor(
                 notify(
                     dto.id.hashCode(),
                     "${dto.requesterName ?: "Your partner"} asks to open ${dto.appLabel}",
-                    "Open BeOffline to approve or deny."
+                    "Open BeOffline to approve or deny.",
+                    route = ROUTE_ACCOUNTABILITY
                 )
             }
             "REQUEST_APPROVED" -> {
@@ -340,7 +350,8 @@ class AccountabilityRepository @Inject constructor(
                 notify(
                     dto.id.hashCode(),
                     "${dto.appLabel} unlocked",
-                    "Approved for ${dto.grantedDurationMinutes} minutes. Open it now."
+                    "Approved for ${dto.grantedDurationMinutes} minutes. Open it now.",
+                    route = ROUTE_ACCOUNTABILITY
                 )
             }
             "REQUEST_DENIED", "REQUEST_EXPIRED" -> {
@@ -349,7 +360,8 @@ class AccountabilityRepository @Inject constructor(
                 notify(
                     dto.id.hashCode(),
                     if (type == "REQUEST_DENIED") "Request denied" else "Request expired",
-                    "${dto.appLabel} stays blocked."
+                    "${dto.appLabel} stays blocked.",
+                    route = ROUTE_ACCOUNTABILITY
                 )
             }
             "REQUEST_RESOLVED" -> {
@@ -359,7 +371,8 @@ class AccountabilityRepository @Inject constructor(
                 notify(
                     dto.id.hashCode(),
                     "Request resolved",
-                    "${dto.resolvedByName ?: "Another member"} already responded for ${dto.appLabel}."
+                    "${dto.resolvedByName ?: "Another member"} already responded for ${dto.appLabel}.",
+                    route = ROUTE_ACCOUNTABILITY
                 )
             }
             "INVITE_ACCEPTED", "PARTNER_REMOVAL_STARTED", "PARTNER_REMOVED" -> {
@@ -369,7 +382,7 @@ class AccountabilityRepository @Inject constructor(
                     "PARTNER_REMOVAL_STARTED" -> "Your partner started removing you. The pairing stays active for the cooldown period."
                     else -> "An accountability pairing has ended."
                 }
-                notify(type.hashCode(), "Accountability update", message)
+                notify(type.hashCode(), "Accountability update", message, route = ROUTE_ACCOUNTABILITY)
             }
             "GROUP_MEMBER_JOINED", "GROUP_MEMBER_REMOVAL_STARTED", "GROUP_MEMBER_LEFT" -> {
                 try { refreshGroups() } catch (_: Exception) { }
@@ -380,7 +393,7 @@ class AccountabilityRepository @Inject constructor(
                     "GROUP_MEMBER_REMOVAL_STARTED" -> "A member is leaving $groupName. Their membership stays active for the cooldown period."
                     else -> "A membership in $groupName has ended."
                 }
-                notify((type + groupName).hashCode(), groupName, message)
+                notify((type + groupName).hashCode(), groupName, message, route = ROUTE_GROUPS)
             }
             "CHAT_MESSAGE" -> {
                 val dto = gson.fromJson(payloadJson, ChatMessageDto::class.java)
@@ -388,10 +401,12 @@ class AccountabilityRepository @Inject constructor(
                 // No notification for your own echo or the conversation on screen.
                 if (dto.senderUid != myUid() && dto.conversationKey != activeConversationKey) {
                     val preview = if (dto.body.length > 120) dto.body.take(120) + "…" else dto.body
+                    val groupId = dto.conversationKey.substringAfter("group:", "")
                     notify(
                         dto.conversationKey.hashCode(),
                         dto.senderName ?: "Group chat",
-                        preview
+                        preview,
+                        route = if (groupId.isNotEmpty()) groupChatRoute(groupId) else ROUTE_GROUPS
                     )
                 }
             }
@@ -427,14 +442,23 @@ class AccountabilityRepository @Inject constructor(
 
     // ── Notifications ─────────────────────────────────────────────────────────
 
-    private fun notify(id: Int, title: String, body: String) {
+    /**
+     * [route] deep-links the tap to a NavGraph destination (e.g. the
+     * Accountability screen for an incoming request). Null just opens the app.
+     * The id doubles as the PendingIntent request code so each notification
+     * carries its own route instead of clobbering a shared intent.
+     */
+    private fun notify(id: Int, title: String, body: String, route: String? = null) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Accountability", NotificationManager.IMPORTANCE_HIGH)
         )
+        val intent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        if (route != null) intent.putExtra(EXTRA_NAV_ROUTE, route)
         val contentIntent = PendingIntent.getActivity(
-            context, 0,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            context, id,
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)

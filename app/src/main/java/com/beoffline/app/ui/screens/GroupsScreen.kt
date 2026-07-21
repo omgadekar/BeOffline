@@ -218,7 +218,9 @@ private fun MemberRow(
                 style = MaterialTheme.typography.bodyLarge, color = TextPrimary
             )
             val subtitle = when {
-                member.removalPending -> "Removal pending — active until cooldown ends"
+                member.removalPending ->
+                    cooldownRemainingText(member.removalEffectiveAtUtc)?.let { "Removal in $it" }
+                        ?: "Removal pending"
                 isInApprovalCooldown(member) -> "New member — can approve soon"
                 else -> "Last seen ${lastSeenText(member.lastSeenAtUtc)}"
             }
@@ -302,6 +304,16 @@ private fun isInApprovalCooldown(member: GroupMemberDto): Boolean = try {
     Instant.parse(member.canApproveAfterUtc).toEpochMilli() > System.currentTimeMillis()
 } catch (_: Exception) {
     false
+}
+
+/** Compact remaining time until a member's removal finalizes, e.g. "23h 45m". */
+private fun cooldownRemainingText(removalEffectiveAtUtc: String?): String? {
+    val millis = try {
+        removalEffectiveAtUtc?.let { Instant.parse(it).toEpochMilli() }
+    } catch (_: Exception) {
+        null
+    } ?: return null
+    return formatCooldownRemaining(millis, System.currentTimeMillis())
 }
 
 private fun lastSeenText(lastSeenAtUtc: String?): String {

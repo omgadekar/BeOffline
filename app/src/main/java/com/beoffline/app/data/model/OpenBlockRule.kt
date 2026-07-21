@@ -56,6 +56,15 @@ data class OpenBlockRule(
     /** Epoch millis when the timer started (for countdown display). */
     val timerStartedAt: Long? = null,
 
+    /**
+     * Pending-disable cooldown (accountability). When set, the user has asked to
+     * turn this lock off but it keeps enforcing until this instant, at which
+     * point it finalizes to inactive. Null = not being turned off. Enforcement
+     * treats a rule as OFF once [disableEffectiveAt] is in the past, so the
+     * block lifts on time with no alarm needed (same model as allowances).
+     */
+    val disableEffectiveAt: Long? = null,
+
     /** Epoch millis when this rule was created */
     val createdAt: Long = System.currentTimeMillis()
 ) : ScheduledWindow

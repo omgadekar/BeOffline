@@ -36,6 +36,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -44,8 +46,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -65,6 +71,7 @@ import com.beoffline.app.ui.theme.StatusDanger
 import com.beoffline.app.ui.theme.TextDisabled
 import com.beoffline.app.ui.theme.TextPrimary
 import com.beoffline.app.ui.theme.TextSecondary
+import kotlinx.coroutines.delay
 
 /**
  * App Lock (open-block) feature home: engine status + rule list.
@@ -82,6 +89,16 @@ fun OpenBlockScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val snackbar = remember { SnackbarHostState() }
+
+    // Ticks once a minute so disable-cooldown countdowns stay current on screen.
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            now = System.currentTimeMillis()
+        }
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -91,8 +108,16 @@ fun OpenBlockScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let {
+            snackbar.showSnackbar(it)
+            viewModel.dismissMessage()
+        }
+    }
+
     Scaffold(
         containerColor = Brand900,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("App Lock") },
@@ -205,9 +230,11 @@ fun OpenBlockScreen(
                 OpenBlockRuleCard(
                     rule = rule,
                     appNames = uiState.appNamesByRule[rule.id] ?: emptyList(),
+                    now = now,
                     onToggle = { active ->
                         if (active) viewModel.activateRule(rule) else viewModel.deactivateRule(rule)
                     },
+                    onCancelDisable = { viewModel.cancelDisable(rule) },
                     onEdit = { onEditRule(rule.id) },
                     onDelete = { viewModel.deleteRule(rule) }
                 )
@@ -359,7 +386,9 @@ private fun EmptyOpenBlockPrompt() {
 private fun OpenBlockRuleCard(
     rule: OpenBlockRule,
     appNames: List<String>,
+    now: Long,
     onToggle: (Boolean) -> Unit,
+    onCancelDisable: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -373,52 +402,77 @@ private fun OpenBlockRuleCard(
         appNames.size <= 3 -> appNames.joinToString(", ")
         else -> appNames.take(3).joinToString(", ") + " +${appNames.size - 3} more"
     }
+    val pendingDisable = rule.disableEffectiveAt?.takeIf { it > now }
 
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Brand800),
         modifier = Modifier.clickable(onClick = onEdit)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            Icon(
-                typeIcon,
-                contentDescription = null,
-                tint = if (rule.isActive) AccentPrimary else TextSecondary,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(rule.name, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-                Text(
-                    text = appsLine,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    maxLines = 1
-                )
-            }
-            IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete ${rule.name}",
-                    tint = TextDisabled,
-                    modifier = Modifier.size(18.dp)
+                    typeIcon,
+                    contentDescription = null,
+                    tint = if (rule.isActive) AccentPrimary else TextSecondary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(rule.name, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                    Text(
+                        text = appsLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        maxLines = 1
+                    )
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete ${rule.name}",
+                        tint = TextDisabled,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Switch(
+                    checked = rule.isActive && pendingDisable == null,
+                    onCheckedChange = onToggle,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = AccentPrimary,
+                        uncheckedThumbColor = TextSecondary,
+                        uncheckedTrackColor = Brand600
+                    )
                 )
             }
-            Switch(
-                checked = rule.isActive,
-                onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = AccentPrimary,
-                    uncheckedThumbColor = TextSecondary,
-                    uncheckedTrackColor = Brand600
-                )
-            )
+
+            // Disable-cooldown banner: the lock is on its way off but still
+            // enforcing, and the partner has been told.
+            if (pendingDisable != null) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(StatusDanger.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Turning off in ${formatCooldownRemaining(pendingDisable, now)} — still active, partner notified",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = StatusDanger,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onCancelDisable) {
+                        Text("Keep on", color = AccentPrimary)
+                    }
+                }
+            }
         }
     }
 }

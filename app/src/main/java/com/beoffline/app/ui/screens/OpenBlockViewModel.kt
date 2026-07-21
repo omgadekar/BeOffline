@@ -3,6 +3,7 @@ package com.beoffline.app.ui.screens
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.background.BackgroundProtectionManager
 import com.beoffline.app.data.model.OpenBlockRule
 import com.beoffline.app.data.model.RuleType
@@ -30,7 +31,9 @@ data class OpenBlockUiState(
     val disclosureAccepted: Boolean = false,
     /** Minutes a solved teaser unlocks an app for (user preference). */
     val teaserAllowanceMinutes: Int = OpenBlockPrefs.DEFAULT_TEASER_ALLOWANCE_MINUTES,
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    /** Transient user-facing note (e.g. why a lock can't be deleted right now). */
+    val message: String? = null
 ) {
     val engineReady: Boolean get() = accessibilityEnabled
     val activeRules: List<OpenBlockRule> get() = rules.filter { it.isActive }
@@ -46,10 +49,18 @@ class OpenBlockViewModel @Inject constructor(
     private val repository: OpenBlockRuleRepository,
     private val blockRuleRepository: BlockRuleRepository,
     private val controller: OpenBlockController,
-    private val backgroundProtectionManager: BackgroundProtectionManager
+    private val backgroundProtectionManager: BackgroundProtectionManager,
+    private val accountabilityRepository: AccountabilityRepository
 ) : ViewModel() {
 
     private val prefs = context.getSharedPreferences(OpenBlockPrefs.FILE, Context.MODE_PRIVATE)
+
+    companion object {
+        // Turning off an actively-enforcing lock is as slow-and-visible as
+        // dropping an accountability partner (mirrors the server removal
+        // cooldown). Lower this to test the flow without waiting a day.
+        private const val DISABLE_COOLDOWN_MILLIS = 24L * 60 * 60 * 1000
+    }
 
     private val _uiState = MutableStateFlow(
         OpenBlockUiState(
@@ -71,6 +82,14 @@ class OpenBlockViewModel @Inject constructor(
     private fun observeRules() {
         viewModelScope.launch {
             repository.getAllRules().collect { rules ->
+                // Belt-and-braces cleanup: if a disable cooldown elapsed while the
+                // finalize worker was delayed (or the app was killed), settle it
+                // now. The resulting DB write re-emits with the field cleared, so
+                // this doesn't loop.
+                val now = System.currentTimeMillis()
+                rules.filter { it.disableEffectiveAt != null && it.disableEffectiveAt <= now }
+                    .forEach { finalizeDisableNow(it.id) }
+
                 _uiState.update { it.copy(rules = rules, isLoading = false) }
                 resolveAppNames(rules)
             }
@@ -113,6 +132,9 @@ class OpenBlockViewModel @Inject constructor(
 
     fun activateRule(rule: OpenBlockRule) {
         viewModelScope.launch {
+            // Re-enabling a lock that was counting down to off → call off the
+            // cooldown first, then re-arm normally.
+            if (rule.disableEffectiveAt != null) cancelDisableInternal(rule.id)
             when (rule.ruleType) {
                 RuleType.PERMANENT -> repository.setRuleActive(rule.id, true)
                 RuleType.TIMER -> {
@@ -131,26 +153,100 @@ class OpenBlockViewModel @Inject constructor(
 
     fun deactivateRule(rule: OpenBlockRule) {
         viewModelScope.launch {
-            repository.setRuleActive(rule.id, false)
-            when (rule.ruleType) {
-                RuleType.TIMER -> {
-                    repository.setTimerStartedAt(rule.id, null)
-                    OpenBlockScheduler.cancelTimerStop(context, rule.id)
+            // Already counting down → ignore repeat toggles (Cancel undoes it).
+            if (rule.disableEffectiveAt != null) return@launch
+
+            val now = System.currentTimeMillis()
+            val enforcing = OpenBlockController.isEnforcingNow(rule, now)
+            val watched = accountabilityRepository.hasPartner() || accountabilityRepository.hasGroup()
+
+            if (enforcing && watched) {
+                // Accountability path: keep enforcing through a cooldown, and tell
+                // the partner/group the moment the user starts backing out. Never
+                // enforce longer than the rule itself would have — a TIMER just
+                // runs out its own clock; open-ended locks get the full cooldown.
+                val cooldownEnd = now + DISABLE_COOLDOWN_MILLIS
+                val effectiveAt = timerEndMillis(rule)?.let { minOf(cooldownEnd, it) } ?: cooldownEnd
+                if (effectiveAt <= now) {
+                    immediateDeactivate(rule)
+                    return@launch
                 }
-                RuleType.SCHEDULED ->
-                    // Manual off: disarm entirely; user re-activates to re-arm.
-                    OpenBlockScheduler.cancelRule(context, rule.id)
-                RuleType.PERMANENT -> Unit
+                repository.setDisableEffectiveAt(rule.id, effectiveAt)
+                OpenBlockScheduler.scheduleDisableFinalize(context, rule.id, effectiveAt - now)
+                accountabilityRepository.reportTamper(
+                    type = "RESTRICTION_DISABLED",
+                    packageName = null,
+                    dedupeKey = "disable-${rule.id}-$effectiveAt"
+                )
+                _uiState.update {
+                    it.copy(message = "Your partner was notified. This lock stays on until the cooldown ends.")
+                }
+            } else {
+                immediateDeactivate(rule)
             }
         }
     }
 
+    /** Undo a pending disable — the lock stays fully on. */
+    fun cancelDisable(rule: OpenBlockRule) {
+        viewModelScope.launch { cancelDisableInternal(rule.id) }
+    }
+
     fun deleteRule(rule: OpenBlockRule) {
         viewModelScope.launch {
+            val enforcing = OpenBlockController.isEnforcingNow(rule)
+            val watched = accountabilityRepository.hasPartner() || accountabilityRepository.hasGroup()
+            if (enforcing && watched) {
+                // Can't silently delete protection out from under an approver.
+                _uiState.update {
+                    it.copy(message = "This lock is protecting you right now. Turn it off first — your partner will be notified.")
+                }
+                return@launch
+            }
             OpenBlockScheduler.cancelRule(context, rule.id)
+            OpenBlockScheduler.cancelDisableFinalize(context, rule.id)
             repository.deleteRule(rule)
         }
     }
+
+    fun dismissMessage() = _uiState.update { it.copy(message = null) }
+
+    private suspend fun immediateDeactivate(rule: OpenBlockRule) {
+        repository.setRuleActive(rule.id, false)
+        when (rule.ruleType) {
+            RuleType.TIMER -> {
+                repository.setTimerStartedAt(rule.id, null)
+                OpenBlockScheduler.cancelTimerStop(context, rule.id)
+            }
+            RuleType.SCHEDULED ->
+                // Manual off: disarm entirely; user re-activates to re-arm.
+                OpenBlockScheduler.cancelRule(context, rule.id)
+            RuleType.PERMANENT -> Unit
+        }
+    }
+
+    private suspend fun cancelDisableInternal(ruleId: Int) {
+        repository.setDisableEffectiveAt(ruleId, null)
+        OpenBlockScheduler.cancelDisableFinalize(context, ruleId)
+    }
+
+    private fun finalizeDisableNow(ruleId: Int) {
+        viewModelScope.launch {
+            repository.finalizeDisable(ruleId)
+            OpenBlockScheduler.cancelRule(context, ruleId)
+            OpenBlockScheduler.cancelDisableFinalize(context, ruleId)
+        }
+    }
+
+    /** Natural end of a TIMER rule (start + duration); null for other types. */
+    private fun timerEndMillis(rule: OpenBlockRule): Long? =
+        if (rule.ruleType == RuleType.TIMER) {
+            rule.timerStartedAt?.let { start ->
+                rule.timerDurationMinutes?.let { minutes -> start + minutes * 60_000L }
+            }
+        } else {
+            null
+        }
 
     /** Play-compliant flow: persist affirmative consent, then open settings. */
     fun acceptDisclosureAndOpenSettings() {
