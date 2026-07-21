@@ -2,6 +2,8 @@
 .gradle-build/
 build/
 **/build/
+# Signed-build outputs (Generate Signed APK/Bundle) — not source.
+app/release/
 local.properties
 *.iml
 .idea/caches/
