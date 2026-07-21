@@ -1,6 +1,8 @@
 package com.beoffline.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,13 +45,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.beoffline.app.data.model.ChatMessageCache
+import com.beoffline.app.ui.screens.GroupChatViewModel.ChatMember
 import com.beoffline.app.ui.theme.AccentPrimary
+import com.beoffline.app.ui.theme.AccentSecondary
 import com.beoffline.app.ui.theme.Brand600
+import com.beoffline.app.ui.theme.Brand700
 import com.beoffline.app.ui.theme.Brand800
 import com.beoffline.app.ui.theme.Brand900
 import com.beoffline.app.ui.theme.TextDisabled
@@ -69,8 +80,11 @@ fun GroupChatScreen(
     val messages by viewModel.messages.collectAsState()
     val groupName by viewModel.groupName.collectAsState()
     val memberCount by viewModel.memberCount.collectAsState()
+    val members by viewModel.members.collectAsState()
+    val mentionNames by viewModel.mentionNames.collectAsState()
     val listState = rememberLazyListState()
-    var input by remember { mutableStateOf("") }
+    var input by remember { mutableStateOf(TextFieldValue("")) }
+    val myUid = viewModel.myUid
 
     // Mute notifications for this conversation while it's on screen.
     DisposableEffect(Unit) {
@@ -78,10 +92,18 @@ fun GroupChatScreen(
         onDispose { viewModel.setOnScreen(false) }
     }
 
-    val items = remember(messages) { buildChatItems(messages, viewModel.myUid) }
+    val items = remember(messages) { buildChatItems(messages, myUid) }
 
     LaunchedEffect(items.size) {
         if (items.isNotEmpty()) listState.animateScrollToItem(items.size - 1)
+    }
+
+    // Active @-mention query (null when the cursor isn't in a mention token).
+    val query = mentionQuery(input)
+    val suggestions = if (query != null) {
+        members.filter { it.name.contains(query, ignoreCase = true) }.take(5)
+    } else {
+        emptyList()
     }
 
     Scaffold(
@@ -131,18 +153,30 @@ fun GroupChatScreen(
                     items(items.size, key = { keyFor(items[it]) }) { index ->
                         when (val item = items[index]) {
                             is ChatItem.Day -> DayDivider(item.label)
-                            is ChatItem.Msg -> MessageRow(item)
+                            is ChatItem.Msg -> MessageRow(
+                                item = item,
+                                mentionNames = mentionNames,
+                                mentionsMe = myUid != null &&
+                                    item.message.mentionedUids?.split(",")?.contains(myUid) == true
+                            )
                         }
                     }
                 }
             }
 
+            if (suggestions.isNotEmpty()) {
+                MentionSuggestions(
+                    members = suggestions,
+                    onPick = { member -> input = applyMention(input, member.name) }
+                )
+            }
+
             ChatInputBar(
                 value = input,
-                onValueChange = { input = it.take(2000) },
+                onValueChange = { input = it },
                 onSend = {
-                    viewModel.send(input)
-                    input = ""
+                    viewModel.send(input.text)
+                    input = TextFieldValue("")
                 }
             )
         }
@@ -200,40 +234,46 @@ private fun DayDivider(label: String) {
 }
 
 @Composable
-private fun MessageRow(item: ChatItem.Msg) {
+private fun MessageRow(item: ChatItem.Msg, mentionNames: List<String>, mentionsMe: Boolean) {
     val message = item.message
     if (item.mine) {
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-            Bubble(message = message, mine = true)
+            Bubble(message = message, mine = true, mentionNames = mentionNames, mentionsMe = false)
         }
     } else {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            // Avatar only on the first message of a run; otherwise reserve the space.
             if (item.showHeader) {
                 Avatar(name = message.senderName, seed = message.senderUid)
             } else {
                 Spacer(Modifier.width(32.dp))
             }
             Spacer(Modifier.width(8.dp))
-            Bubble(message = message, mine = false, showName = item.showHeader)
+            Bubble(message = message, mine = false, showName = item.showHeader,
+                mentionNames = mentionNames, mentionsMe = mentionsMe)
         }
     }
 }
 
 @Composable
-private fun Bubble(message: ChatMessageCache, mine: Boolean, showName: Boolean = false) {
+private fun Bubble(
+    message: ChatMessageCache,
+    mine: Boolean,
+    showName: Boolean = false,
+    mentionNames: List<String>,
+    mentionsMe: Boolean
+) {
+    val shape = RoundedCornerShape(
+        topStart = 16.dp, topEnd = 16.dp,
+        bottomStart = if (mine) 16.dp else 5.dp,
+        bottomEnd = if (mine) 5.dp else 16.dp
+    )
+    var bubble = Modifier
+        .widthIn(max = 300.dp)
+        .background(color = if (mine) AccentPrimary else Brand800, shape = shape)
+    if (mentionsMe) bubble = bubble.border(1.5.dp, AccentSecondary, shape)
+
     Column(
-        modifier = Modifier
-            .widthIn(max = 300.dp)
-            .background(
-                color = if (mine) AccentPrimary else Brand800,
-                shape = RoundedCornerShape(
-                    topStart = 16.dp, topEnd = 16.dp,
-                    bottomStart = if (mine) 16.dp else 5.dp,
-                    bottomEnd = if (mine) 5.dp else 16.dp
-                )
-            )
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier = bubble.padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         if (!mine && showName) {
@@ -244,8 +284,9 @@ private fun Bubble(message: ChatMessageCache, mine: Boolean, showName: Boolean =
                 fontWeight = FontWeight.SemiBold
             )
         }
+        val mentionColor = if (mine) Color(0xFFFFF3B0) else AccentPrimary
         Text(
-            message.body,
+            annotateMentions(message.body, mentionNames, mentionColor),
             style = MaterialTheme.typography.bodyMedium,
             color = if (mine) Color.White else TextPrimary
         )
@@ -255,6 +296,31 @@ private fun Bubble(message: ChatMessageCache, mine: Boolean, showName: Boolean =
             color = if (mine) Color.White.copy(alpha = 0.7f) else TextDisabled,
             modifier = Modifier.align(Alignment.End)
         )
+    }
+}
+
+@Composable
+private fun MentionSuggestions(members: List<ChatMember>, onPick: (ChatMember) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 200.dp)
+            .background(Brand800)
+            .padding(vertical = 4.dp)
+    ) {
+        members.forEach { member ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onPick(member) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Avatar(name = member.name, seed = member.uid)
+                Spacer(Modifier.width(10.dp))
+                Text(member.name, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+            }
+        }
     }
 }
 
@@ -272,7 +338,7 @@ private fun Avatar(name: String?, seed: String) {
 }
 
 @Composable
-private fun ChatInputBar(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit) {
+private fun ChatInputBar(value: TextFieldValue, onValueChange: (TextFieldValue) -> Unit, onSend: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -282,8 +348,8 @@ private fun ChatInputBar(value: String, onValueChange: (String) -> Unit, onSend:
     ) {
         OutlinedTextField(
             value = value,
-            onValueChange = onValueChange,
-            placeholder = { Text("Message", color = TextDisabled) },
+            onValueChange = { onValueChange(it.copy(text = it.text.take(2000))) },
+            placeholder = { Text("Message  ·  @ to mention", color = TextDisabled) },
             modifier = Modifier.weight(1f),
             maxLines = 4,
             shape = RoundedCornerShape(22.dp),
@@ -296,7 +362,7 @@ private fun ChatInputBar(value: String, onValueChange: (String) -> Unit, onSend:
                 unfocusedTextColor = TextPrimary
             )
         )
-        val enabled = value.isNotBlank()
+        val enabled = value.text.isNotBlank()
         Box(
             modifier = Modifier
                 .size(48.dp)
@@ -328,11 +394,7 @@ private fun EmptyChat(modifier: Modifier = Modifier) {
             tint = TextDisabled,
             modifier = Modifier.size(40.dp)
         )
-        Text(
-            "No messages yet",
-            style = MaterialTheme.typography.titleSmall,
-            color = TextPrimary
-        )
+        Text("No messages yet", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
         Text(
             "Say hello, cheer someone on, or check in on the group's goals.",
             style = MaterialTheme.typography.bodySmall,
@@ -342,6 +404,45 @@ private fun EmptyChat(modifier: Modifier = Modifier) {
         Spacer(Modifier.weight(1f))
     }
 }
+
+// ── Mention helpers ──────────────────────────────────────────────────────────
+
+/** The @-token being typed at the cursor, or null. Empty string means just "@". */
+private fun mentionQuery(tfv: TextFieldValue): String? {
+    val cursor = tfv.selection.end
+    if (cursor <= 0 || cursor > tfv.text.length) return null
+    val upToCursor = tfv.text.substring(0, cursor)
+    val at = upToCursor.lastIndexOf('@')
+    if (at < 0) return null
+    if (at > 0 && !upToCursor[at - 1].isWhitespace()) return null // must start a token
+    val q = upToCursor.substring(at + 1)
+    if (q.any { it.isWhitespace() }) return null // a space ends the mention
+    return q
+}
+
+/** Replaces the in-progress @token at the cursor with "@Name ". */
+private fun applyMention(tfv: TextFieldValue, name: String): TextFieldValue {
+    val cursor = tfv.selection.end
+    val at = tfv.text.substring(0, cursor).lastIndexOf('@')
+    if (at < 0) return tfv
+    val insert = "@$name "
+    val newText = tfv.text.substring(0, at) + insert + tfv.text.substring(cursor)
+    return TextFieldValue(newText, TextRange(at + insert.length))
+}
+
+/** Colors every "@<memberName>" occurrence. Longer names first so full names win over prefixes. */
+private fun annotateMentions(body: String, names: List<String>, color: Color): AnnotatedString =
+    buildAnnotatedString {
+        append(body)
+        for (name in names.sortedByDescending { it.length }) {
+            val token = "@$name"
+            var i = body.indexOf(token)
+            while (i >= 0) {
+                addStyle(SpanStyle(color = color, fontWeight = FontWeight.SemiBold), i, i + token.length)
+                i = body.indexOf(token, i + token.length)
+            }
+        }
+    }
 
 // ── Time helpers ─────────────────────────────────────────────────────────────
 

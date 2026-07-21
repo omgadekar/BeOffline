@@ -40,12 +40,20 @@ public sealed class ChatController(AppDbContext db, INotificationService notifie
         if (existing is not null)
             return ChatMessageDto.From(existing, await DisplayNameAsync(uid));
 
+        // Only real co-members can be mentioned (drops junk / self-mentions).
+        var memberUids = members.Select(m => m.Uid).ToHashSet();
+        var mentioned = (request.MentionedUids ?? [])
+            .Where(u => u != uid && memberUids.Contains(u))
+            .Distinct()
+            .ToList();
+
         var message = new ChatMessage
         {
             Id = Guid.NewGuid(),
             ConversationKey = KeyFor(groupId),
             SenderUid = uid,
             Body = body,
+            MentionedUids = mentioned.Count > 0 ? string.Join(",", mentioned) : null,
             ClientMessageId = request.ClientMessageId,
             SentAtUtc = now
         };

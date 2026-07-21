@@ -40,7 +40,8 @@ object AppModule {
             BeOfflineDatabase.MIGRATION_2_3,
             BeOfflineDatabase.MIGRATION_3_4,
             BeOfflineDatabase.MIGRATION_4_5,
-            BeOfflineDatabase.MIGRATION_5_6
+            BeOfflineDatabase.MIGRATION_5_6,
+            BeOfflineDatabase.MIGRATION_6_7
         )
         .build()
     }

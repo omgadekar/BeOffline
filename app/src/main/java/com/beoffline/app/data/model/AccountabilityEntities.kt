@@ -67,7 +67,9 @@ data class ChatMessageCache(
     val senderName: String?,
     val body: String,
     val sentAtUtc: Long,
-    val pending: Boolean = false
+    val pending: Boolean = false,
+    /** Comma-separated UIDs of @-mentioned members; null if none. */
+    val mentionedUids: String? = null
 )
 
 /**

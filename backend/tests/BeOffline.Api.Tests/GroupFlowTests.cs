@@ -262,4 +262,27 @@ public sealed class GroupFlowTests : IClassFixture<TestAppFactory>
             (await outsider.PostAsJsonAsync($"/api/chat/groups/{group.Id}/messages",
                 new SendChatMessageRequest("c-mx", "hi"))).StatusCode);
     }
+
+    [Fact]
+    public async Task Chat_mentions_areValidatedToMembers_andReturnedInDto()
+    {
+        var alice = _factory.ClientFor("mention-alice");
+        var bob = _factory.ClientFor("mention-bob");
+        var group = await CreateGroupAsync(alice, "Mentions");
+        await JoinAsync(alice, bob, group.Id);
+
+        // Mention bob (valid), self (dropped), a stranger (dropped).
+        var dto = await (await alice.PostAsJsonAsync($"/api/chat/groups/{group.Id}/messages",
+                new SendChatMessageRequest("mn-1", "@Bob you there?",
+                    new List<string> { "mention-bob", "mention-alice", "stranger" })))
+            .Content.ReadFromJsonAsync<ChatMessageDto>();
+
+        Assert.Equal(new[] { "mention-bob" }, dto!.MentionedUids);
+        Assert.Contains(_factory.Push.For("mention-bob"), s => s.Type == "CHAT_MESSAGE");
+
+        // Persisted, so the mention survives a history reload.
+        var history = await (await bob.GetAsync($"/api/chat/groups/{group.Id}/messages"))
+            .Content.ReadFromJsonAsync<List<ChatMessageDto>>();
+        Assert.Contains(history!, m => m.Id == dto.Id && m.MentionedUids.Contains("mention-bob"));
+    }
 }

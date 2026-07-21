@@ -177,7 +177,7 @@ class AccountabilityRepository @Inject constructor(
      * Offline-first send: a pending local echo appears immediately; the outbox
      * delivers when the network allows and swaps in the server's copy.
      */
-    suspend fun sendChatMessage(groupId: String, text: String) {
+    suspend fun sendChatMessage(groupId: String, text: String, mentionedUids: List<String> = emptyList()) {
         val user = FirebaseAuth.getInstance().currentUser ?: return
         val body = text.trim()
         if (body.isEmpty()) return
@@ -190,14 +190,15 @@ class AccountabilityRepository @Inject constructor(
                 senderName = user.displayName,
                 body = body,
                 sentAtUtc = System.currentTimeMillis(),
-                pending = true
+                pending = true,
+                mentionedUids = mentionedUids.joinToString(",").ifEmpty { null }
             )
         )
         outboxDao.insert(
             OutboxItem(
                 type = OUTBOX_CHAT,
                 clientKey = clientMessageId,
-                payloadJson = gson.toJson(ChatOutboxPayload(groupId, clientMessageId, body))
+                payloadJson = gson.toJson(ChatOutboxPayload(groupId, clientMessageId, body, mentionedUids))
             )
         )
         OutboxWorker.enqueue(context)
@@ -326,7 +327,7 @@ class AccountabilityRepository @Inject constructor(
                         val payload = gson.fromJson(item.payloadJson, ChatOutboxPayload::class.java)
                         val dto = api.sendChatMessage(
                             payload.groupId,
-                            SendChatBody(payload.clientMessageId, payload.body)
+                            SendChatBody(payload.clientMessageId, payload.body, payload.mentionedUids)
                         )
                         // Server copy replaces the pending local echo.
                         chatMessageDao.delete(payload.clientMessageId)
@@ -420,12 +421,19 @@ class AccountabilityRepository @Inject constructor(
                 if (dto.senderUid != myUid() && dto.conversationKey != activeConversationKey) {
                     val preview = if (dto.body.length > 120) dto.body.take(120) + "…" else dto.body
                     val groupId = dto.conversationKey.substringAfter("group:", "")
-                    notify(
-                        dto.conversationKey.hashCode(),
-                        dto.senderName ?: "Group chat",
-                        preview,
-                        route = if (groupId.isNotEmpty()) groupChatRoute(groupId) else ROUTE_GROUPS
-                    )
+                    val route = if (groupId.isNotEmpty()) groupChatRoute(groupId) else ROUTE_GROUPS
+                    val mentionedMe = dto.mentionedUids?.contains(myUid()) == true
+                    if (mentionedMe) {
+                        notify(
+                            dto.conversationKey.hashCode(),
+                            "${dto.senderName ?: "Someone"} mentioned you",
+                            preview,
+                            route = route,
+                            highlight = true
+                        )
+                    } else {
+                        notify(dto.conversationKey.hashCode(), dto.senderName ?: "Group chat", preview, route = route)
+                    }
                 }
             }
             "TAMPER_ALERT" -> {
@@ -466,7 +474,7 @@ class AccountabilityRepository @Inject constructor(
      * The id doubles as the PendingIntent request code so each notification
      * carries its own route instead of clobbering a shared intent.
      */
-    private fun notify(id: Int, title: String, body: String, route: String? = null) {
+    private fun notify(id: Int, title: String, body: String, route: String? = null, highlight: Boolean = false) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Accountability", NotificationManager.IMPORTANCE_HIGH)
@@ -479,14 +487,19 @@ class AccountabilityRepository @Inject constructor(
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
-            .build()
+        if (highlight) {
+            // @-mention: tint the notification accent so it stands out in the shade.
+            builder.setColor(0xFF6C5CE7.toInt())
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+        }
+        val notification = builder.build()
         if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             try {
                 NotificationManagerCompat.from(context).notify(id, notification)
@@ -537,7 +550,8 @@ class AccountabilityRepository @Inject constructor(
         senderName = senderName,
         body = body,
         sentAtUtc = Instant.parse(sentAtUtc).toEpochMilli(),
-        pending = false
+        pending = false,
+        mentionedUids = mentionedUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
     )
 }
 
@@ -545,5 +559,6 @@ class AccountabilityRepository @Inject constructor(
 data class ChatOutboxPayload(
     val groupId: String,
     val clientMessageId: String,
-    val body: String
+    val body: String,
+    val mentionedUids: List<String> = emptyList()
 )

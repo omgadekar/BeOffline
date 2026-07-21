@@ -62,7 +62,7 @@ public sealed record GroupDto(
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
 
-public sealed record SendChatMessageRequest(string ClientMessageId, string Body);
+public sealed record SendChatMessageRequest(string ClientMessageId, string Body, List<string>? MentionedUids = null);
 
 public sealed record ChatMessageDto(
     Guid Id,
@@ -70,10 +70,15 @@ public sealed record ChatMessageDto(
     string SenderUid,
     string? SenderName,
     string Body,
+    List<string> MentionedUids,
     DateTime SentAtUtc)
 {
     public static ChatMessageDto From(ChatMessage m, string? senderName = null) => new(
-        m.Id, m.ConversationKey, m.SenderUid, senderName, m.Body, m.SentAtUtc);
+        m.Id, m.ConversationKey, m.SenderUid, senderName, m.Body,
+        string.IsNullOrEmpty(m.MentionedUids)
+            ? new List<string>()
+            : m.MentionedUids.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
+        m.SentAtUtc);
 }
 
 // ── Unlock requests ──────────────────────────────────────────────────────────

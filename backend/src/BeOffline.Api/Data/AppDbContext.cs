@@ -74,6 +74,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.HasIndex(x => new { x.ConversationKey, x.SentAtUtc });
             e.Property(x => x.ConversationKey).HasMaxLength(96);
             e.Property(x => x.Body).HasMaxLength(2000);
+            e.Property(x => x.MentionedUids).HasMaxLength(1024);
         });
 
         b.Entity<UnlockRequest>(e =>

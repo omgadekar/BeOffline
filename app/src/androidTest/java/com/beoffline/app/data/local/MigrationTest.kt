@@ -132,7 +132,7 @@ class MigrationTest {
     }
 
     @Test
-    fun migrate1To6_fullChain_preservesRules_andCreatesM3M4Tables() {
+    fun migrate1To7_fullChain_preservesRules_andCreatesM3M4Tables() {
         helper.createDatabase(dbName, 1).apply {
             execSQL(
                 "INSERT INTO block_rules " +
@@ -145,14 +145,14 @@ class MigrationTest {
         }
 
         // The exact chain a v1 production install walks on upgrade to this build
-        // (runMigrationsAndValidate diffs the end state against schemas/6.json —
-        // including the M4 columns on unlock_request_cache and the v6
-        // disableEffectiveAt column on open_block_rules).
+        // (runMigrationsAndValidate diffs the end state against schemas/7.json —
+        // M4 columns on unlock_request_cache, v6 disableEffectiveAt on
+        // open_block_rules, and v7 mentionedUids on chat_messages).
         val db = helper.runMigrationsAndValidate(
-            dbName, 6, true,
+            dbName, 7, true,
             BeOfflineDatabase.MIGRATION_1_2, BeOfflineDatabase.MIGRATION_2_3,
             BeOfflineDatabase.MIGRATION_3_4, BeOfflineDatabase.MIGRATION_4_5,
-            BeOfflineDatabase.MIGRATION_5_6
+            BeOfflineDatabase.MIGRATION_5_6, BeOfflineDatabase.MIGRATION_6_7
         )
 
         db.query("SELECT name FROM block_rules").use { c ->
@@ -174,8 +174,8 @@ class MigrationTest {
                 "VALUES ('g1', 'Focus crew', 'uid1', '[]', 1721000000000)"
         )
         db.execSQL(
-            "INSERT INTO chat_messages (id, conversationKey, senderUid, senderName, body, sentAtUtc, pending) " +
-                "VALUES ('m1', 'group:g1', 'uid1', 'Sam', 'hello', 1721000000000, 0)"
+            "INSERT INTO chat_messages (id, conversationKey, senderUid, senderName, body, sentAtUtc, pending, mentionedUids) " +
+                "VALUES ('m1', 'group:g1', 'uid1', 'Sam', 'hey @Om', 1721000000000, 0, 'uid2')"
         )
         db.query("SELECT groupName, resolvedByName FROM unlock_request_cache WHERE id = 'r1'").use { c ->
             assertTrue(c.moveToFirst())

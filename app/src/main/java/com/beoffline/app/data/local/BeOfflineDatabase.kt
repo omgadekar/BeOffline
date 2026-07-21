@@ -21,7 +21,7 @@ import com.beoffline.app.data.model.SoloTeaserState
         Partner::class, CachedUnlockRequest::class, OutboxItem::class,
         GroupCache::class, ChatMessageCache::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -177,6 +177,16 @@ abstract class BeOfflineDatabase : RoomDatabase() {
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `open_block_rules` ADD COLUMN `disableEffectiveAt` INTEGER")
+            }
+        }
+
+        /**
+         * v6 → v7: @-mentions in group chat. One nullable column holding the
+         * comma-separated mentioned UIDs. Additive; must match schemas/7.json.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `chat_messages` ADD COLUMN `mentionedUids` TEXT")
             }
         }
     }

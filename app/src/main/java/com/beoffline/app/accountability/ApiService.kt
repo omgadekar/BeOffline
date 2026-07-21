@@ -84,7 +84,11 @@ interface ApiService {
 data class AcceptInviteBody(val code: String)
 data class CreateGroupBody(val name: String)
 data class JoinGroupBody(val code: String)
-data class SendChatBody(val clientMessageId: String, val body: String)
+data class SendChatBody(
+    val clientMessageId: String,
+    val body: String,
+    val mentionedUids: List<String>? = null
+)
 data class CreateRequestBody(
     val clientRequestId: String,
     val packageName: String,
@@ -161,5 +165,6 @@ data class ChatMessageDto(
     val senderUid: String,
     val senderName: String?,
     val body: String,
+    val mentionedUids: List<String>? = null,
     val sentAtUtc: String
 )

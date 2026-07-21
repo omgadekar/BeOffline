@@ -131,6 +131,8 @@ public sealed class ChatMessage
     public required string ConversationKey { get; set; }
     public required string SenderUid { get; set; }
     public required string Body { get; set; }
+    /// <summary>Comma-separated UIDs of mentioned (@) members; null if none.</summary>
+    public string? MentionedUids { get; set; }
     /// <summary>Client idempotency key — the offline outbox may retry a send.</summary>
     public required string ClientMessageId { get; set; }
     public DateTime SentAtUtc { get; set; }
