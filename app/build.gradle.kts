@@ -9,14 +9,14 @@ plugins {
 
 android {
     namespace = "com.beoffline.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.beoffline.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 7
-        versionName = "1.0.6"
+        targetSdk = 36
+        versionCode = 8
+        versionName = "1.0.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
