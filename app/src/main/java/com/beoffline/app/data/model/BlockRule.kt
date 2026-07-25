@@ -31,17 +31,17 @@ data class BlockRule(
     /** Is this rule currently enforced (VPN active for it) */
     val isActive: Boolean = false,
 
-    // ── Scheduled rule fields ──────────────────────────────────────────────
+    // ── Scheduled rule fields (ScheduledWindow) ────────────────────────────
     /** Hour of day to START blocking (24h format). Null for non-scheduled rules. */
-    val startHour: Int? = null,
-    val startMinute: Int? = null,
+    override val startHour: Int? = null,
+    override val startMinute: Int? = null,
 
     /** Hour of day to STOP blocking. Null for non-scheduled rules. */
-    val endHour: Int? = null,
-    val endMinute: Int? = null,
+    override val endHour: Int? = null,
+    override val endMinute: Int? = null,
 
     /** Which days of week the schedule applies. 1=Mon, 7=Sun. */
-    val activeDays: List<Int>? = null,
+    override val activeDays: List<Int>? = null,
 
     // ── Timer rule fields ──────────────────────────────────────────────────
     /** Duration in minutes for TIMER type rules. */
@@ -52,7 +52,7 @@ data class BlockRule(
 
     /** Epoch millis when this rule was created */
     val createdAt: Long = System.currentTimeMillis()
-)
+) : ScheduledWindow
 
 enum class RuleType {
     PERMANENT,   // Block indefinitely until user manually stops

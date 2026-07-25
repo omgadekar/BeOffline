@@ -9,14 +9,14 @@ plugins {
 
 android {
     namespace = "com.beoffline.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.beoffline.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 4
-        versionName = "1.0.3"
+        targetSdk = 36
+        versionCode = 8
+        versionName = "1.0.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -33,9 +33,21 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // MUST be HTTPS (release builds block cleartext) and MUST be set to
+            // the real deployed host before shipping — the placeholder does not
+            // resolve, so a forgotten edit fails loudly, not silently.
+            buildConfigField(
+                "String", "ACCOUNTABILITY_API_BASE_URL",
+                "\"https://beoffline-api.askthepolicy.com/\""   // trailing slash required
+            )
         }
         debug {
             isDebuggable = true
+            // Host machine as seen from an emulator (local Kestrel / docker).
+            buildConfigField(
+                "String", "ACCOUNTABILITY_API_BASE_URL",
+                "\"http://10.0.2.2:5080/\""
+            )
         }
     }
 
@@ -62,11 +74,33 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    sourceSets {
+        // Expose exported Room schemas to instrumentation tests (MigrationTestHelper).
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+}
+
+ksp {
+    // Export Room schemas so real migrations can be written and tested.
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.messaging)
+
+    // Accountability backend client
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.microsoft.signalr)
 
     // Core Android
     implementation(libs.androidx.core.ktx)
@@ -109,6 +143,7 @@ dependencies {
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.room.testing)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)

@@ -12,7 +12,20 @@
           "package_name": "com.beoffline.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1038929620243-kv7t8eh93po86un835boq196m09sfdbc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.beoffline.app",
+            "certificate_hash": "d614dac2a0772b612f407c88e939896312bc50cf"
+          }
+        },
+        {
+          "client_id": "1038929620243-523qbj8s15r0cgegt11ri5pksoeldpvu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDXJISE_4Aq2g4Q0-HHOf0Ez9drHjFxer0"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1038929620243-523qbj8s15r0cgegt11ri5pksoeldpvu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

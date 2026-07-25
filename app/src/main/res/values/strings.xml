@@ -4,4 +4,10 @@
     <string name="vpn_service_label">BeOffline VPN</string>
     <string name="notification_channel_name">BeOffline VPN Status</string>
     <string name="notification_channel_desc">Shows which apps are currently offline</string>
+
+    <!-- Open-block (App Lock) accessibility service.
+         This description shows in the system Accessibility settings page and is
+         part of the Play prominent-disclosure story: state exactly what is
+         observed and why, and what is NOT collected. -->
+    <string name="open_block_a11y_description">BeOffline uses this accessibility service for one purpose: to detect when an app you chose to block is opened during a focus session, so it can show your block screen instead. It only observes which app comes to the foreground. It does not read screen content, does not collect what you type, and never sends this information off your device.</string>
 </resources>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Open-block engine accessibility config.
+
+    Deliberately minimal permission weight:
+      - only typeWindowStateChanged events (foreground app changes)
+      - canRetrieveWindowContent = false (we never read screen content;
+        event.packageName is delivered regardless)
+      - isAccessibilityTool = FALSE: BeOffline is a digital-wellbeing app, NOT an
+        accessibility tool for people with disabilities. This is a legitimate
+        NON-accessibility use of the API — foreground detection for the user's
+        own self-imposed app blocking — disclosed prominently before the user
+        enables it. Declaring isAccessibilityTool=true would be a false claim
+        under Google Play policy (that form is only for genuine disability aids).
+        Trade-off: users who turn on Android Advanced Protection Mode may have
+        the service disabled; the engine then degrades and the app shows that
+        protection is off (UsageStats is the intended fallback there).
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/open_block_a11y_description"
+    android:isAccessibilityTool="false"
+    android:notificationTimeout="50" />

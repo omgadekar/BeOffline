@@ -1,0 +1,8 @@
+bin/
+obj/
+*.user
+appsettings.Production.json
+firebase-service-account.json
+# IDE + publish output — never source.
+.vs/
+publish/

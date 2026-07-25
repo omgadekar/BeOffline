@@ -14,6 +14,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.beoffline.app.data.model.BlockRule
 import com.beoffline.app.data.model.RuleType
+import com.beoffline.app.data.model.ScheduledWindow
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.receiver.ScheduleAlarmReceiver
 import com.beoffline.app.vpn.VpnController
@@ -83,12 +84,17 @@ object RuleScheduler {
         cancelExactTimerStopAlarm(context, ruleId)
     }
 
-    fun isWithinScheduledWindow(rule: BlockRule, nowMillis: Long = System.currentTimeMillis()): Boolean {
-        val startHour = rule.startHour ?: return false
-        val startMinute = rule.startMinute ?: return false
-        val endHour = rule.endHour ?: return false
-        val endMinute = rule.endMinute ?: return false
-        val activeDays = rule.activeDays?.takeIf { it.isNotEmpty() } ?: listOf(1, 2, 3, 4, 5, 6, 7)
+    /**
+     * Window-evaluation is shared by both restriction engines: any rule type
+     * implementing [ScheduledWindow] (internet-block or open-block) gets the
+     * same midnight-crossing-aware "inside the window right now" check.
+     */
+    fun isWithinScheduledWindow(window: ScheduledWindow, nowMillis: Long = System.currentTimeMillis()): Boolean {
+        val startHour = window.startHour ?: return false
+        val startMinute = window.startMinute ?: return false
+        val endHour = window.endHour ?: return false
+        val endMinute = window.endMinute ?: return false
+        val activeDays = window.activeDays?.takeIf { it.isNotEmpty() } ?: listOf(1, 2, 3, 4, 5, 6, 7)
         val calendarDays = mapOf(
             Calendar.MONDAY to 1,
             Calendar.TUESDAY to 2,
@@ -129,7 +135,53 @@ object RuleScheduler {
         return false
     }
 
-    private fun calculateNextOccurrenceTimeMillis(
+    /**
+     * Start (epoch millis) of the window occurrence containing [nowMillis],
+     * or null when outside every occurrence. Used as the solo-teaser
+     * "focus session" identity for SCHEDULED rules.
+     */
+    fun currentWindowStartMillis(window: ScheduledWindow, nowMillis: Long = System.currentTimeMillis()): Long? {
+        val startHour = window.startHour ?: return null
+        val startMinute = window.startMinute ?: return null
+        val endHour = window.endHour ?: return null
+        val endMinute = window.endMinute ?: return null
+        val activeDays = window.activeDays?.takeIf { it.isNotEmpty() } ?: listOf(1, 2, 3, 4, 5, 6, 7)
+        val calendarDays = mapOf(
+            Calendar.MONDAY to 1, Calendar.TUESDAY to 2, Calendar.WEDNESDAY to 3,
+            Calendar.THURSDAY to 4, Calendar.FRIDAY to 5, Calendar.SATURDAY to 6, Calendar.SUNDAY to 7
+        )
+
+        for (offset in -1..0) {
+            val start = Calendar.getInstance().apply {
+                timeInMillis = nowMillis
+                add(Calendar.DAY_OF_YEAR, offset)
+                set(Calendar.HOUR_OF_DAY, startHour)
+                set(Calendar.MINUTE, startMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val customDay = calendarDays[start.get(Calendar.DAY_OF_WEEK)] ?: continue
+            if (customDay !in activeDays) continue
+
+            val end = (start.clone() as Calendar).apply {
+                set(Calendar.HOUR_OF_DAY, endHour)
+                set(Calendar.MINUTE, endMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (timeInMillis <= start.timeInMillis) {
+                    add(Calendar.DAY_OF_YEAR, 1)
+                }
+            }
+
+            if (nowMillis in start.timeInMillis until end.timeInMillis) {
+                return start.timeInMillis
+            }
+        }
+        return null
+    }
+
+    /** Shared with OpenBlockScheduler — next window-start for any ScheduledWindow shape. */
+    fun calculateNextOccurrenceTimeMillis(
         hour: Int,
         minute: Int,
         activeDays: List<Int>?
@@ -167,13 +219,14 @@ object RuleScheduler {
         return now.timeInMillis + TimeUnit.DAYS.toMillis(1)
     }
 
-    private fun calculateNextStopTimeMillis(rule: BlockRule): Long {
-        val startHour = rule.startHour ?: return System.currentTimeMillis() + 60_000L
-        val startMinute = rule.startMinute ?: 0
-        val endHour = rule.endHour ?: return System.currentTimeMillis() + 60_000L
-        val endMinute = rule.endMinute ?: 0
+    /** Shared with OpenBlockScheduler — next window-end for any ScheduledWindow shape. */
+    fun calculateNextStopTimeMillis(window: ScheduledWindow): Long {
+        val startHour = window.startHour ?: return System.currentTimeMillis() + 60_000L
+        val startMinute = window.startMinute ?: 0
+        val endHour = window.endHour ?: return System.currentTimeMillis() + 60_000L
+        val endMinute = window.endMinute ?: 0
         val now = System.currentTimeMillis()
-        val days = rule.activeDays?.takeIf { it.isNotEmpty() } ?: listOf(1, 2, 3, 4, 5, 6, 7)
+        val days = window.activeDays?.takeIf { it.isNotEmpty() } ?: listOf(1, 2, 3, 4, 5, 6, 7)
         val calendarDays = mapOf(
             Calendar.MONDAY to 1,
             Calendar.TUESDAY to 2,

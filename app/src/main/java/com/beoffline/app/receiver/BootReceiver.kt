@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.beoffline.app.data.repository.BlockRuleRepository
+import com.beoffline.app.data.repository.OpenBlockRuleRepository
 import com.beoffline.app.data.model.RuleType
+import com.beoffline.app.scheduler.OpenBlockScheduler
 import com.beoffline.app.scheduler.RuleScheduler
 import com.beoffline.app.vpn.VpnController
 import com.beoffline.app.vpn.VpnResilienceScheduler
@@ -32,6 +34,9 @@ class BootReceiver : BroadcastReceiver() {
     lateinit var repository: BlockRuleRepository
 
     @Inject
+    lateinit var openBlockRepository: OpenBlockRuleRepository
+
+    @Inject
     lateinit var vpnController: VpnController
 
     companion object {
@@ -55,6 +60,13 @@ class BootReceiver : BroadcastReceiver() {
                 allRules
                     .filter { it.ruleType == RuleType.SCHEDULED }
                     .forEach { RuleScheduler.scheduleRule(context, it) }
+
+                // Open-block engine: re-arm its scheduled rules' alarms too.
+                // (The AccessibilityService itself is restarted by the system;
+                // active TIMER stops survive reboot via their WorkManager backup.)
+                openBlockRepository.getAllRulesOnce()
+                    .filter { it.ruleType == RuleType.SCHEDULED }
+                    .forEach { OpenBlockScheduler.scheduleRule(context, it) }
 
                 val activePackages = repository.getActiveBlockedPackages()
                 if (activePackages.isNotEmpty()) {

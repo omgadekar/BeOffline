@@ -10,10 +10,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.beoffline.app.accountability.AccountabilityRepository
+import com.beoffline.app.accountability.RealtimeClient
 import com.beoffline.app.ui.navigation.BeOfflineNavGraph
 import com.beoffline.app.ui.theme.BeOfflineTheme
 import com.beoffline.app.vpn.VpnController
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -21,6 +24,12 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var vpnController: VpnController
+
+    @Inject
+    lateinit var realtimeClient: RealtimeClient
+
+    // Deep-link target from a tapped notification (null = normal launch).
+    private val navRoute = MutableStateFlow<String?>(null)
 
     // ── VPN Permission Launcher ────────────────────────────────────────────────
     // Android requires the user to explicitly approve a VPN connection on first use.
@@ -42,13 +51,37 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        navRoute.value = intent?.getStringExtra(AccountabilityRepository.EXTRA_NAV_ROUTE)
         setContent {
             BeOfflineTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    BeOfflineNavGraph(onRequestVpn = ::requestVpnPermission)
+                    BeOfflineNavGraph(
+                        onRequestVpn = ::requestVpnPermission,
+                        navRoute = navRoute,
+                        onNavRouteHandled = { navRoute.value = null }
+                    )
                 }
             }
         }
+    }
+
+    // App already running: a tapped notification arrives here (singleTop).
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(AccountabilityRepository.EXTRA_NAV_ROUTE)?.let { navRoute.value = it }
+    }
+
+    // Single-activity app: onStart/onStop ≈ app foreground/background. SignalR
+    // rides the foreground; FCM covers everything else.
+    override fun onStart() {
+        super.onStart()
+        realtimeClient.start()
+    }
+
+    override fun onStop() {
+        realtimeClient.stop()
+        super.onStop()
     }
 
     /**
