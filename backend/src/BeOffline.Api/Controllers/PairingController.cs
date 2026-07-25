@@ -84,7 +84,7 @@ public sealed class PairingController(AppDbContext db, INotificationService noti
         db.Pairings.Add(pairing);
         await db.SaveChangesAsync();
 
-        var accepterName = (await db.Users.FindAsync(uid))?.DisplayName ?? "Your invitee";
+        var accepterName = Names.First((await db.Users.FindAsync(uid))?.DisplayName, "Your invitee");
         await notifier.NotifyAsync(
             invite.IssuerUid, "INVITE_ACCEPTED", new { pairingId = pairing.Id },
             "Pairing complete", $"{accepterName} accepted your invite — you are now accountability partners.");
@@ -134,7 +134,7 @@ public sealed class PairingController(AppDbContext db, INotificationService noti
         pairing.RemovalEffectiveAtUtc = now.AddHours(cooldownHours);
         await db.SaveChangesAsync();
 
-        var removerName = (await db.Users.FindAsync(uid))?.DisplayName ?? "Your partner";
+        var removerName = Names.First((await db.Users.FindAsync(uid))?.DisplayName);
         await notifier.NotifyAsync(
             pairing.PartnerOf(uid), "PARTNER_REMOVAL_STARTED",
             new { pairingId = pairing.Id, effectiveAtUtc = pairing.RemovalEffectiveAtUtc },

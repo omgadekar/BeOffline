@@ -2,27 +2,48 @@ package com.beoffline.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Brand Palette ─────────────────────────────────────────────────────────────
-val Brand900 = Color(0xFF0D0F1A)   // Deep space - darkest background
-val Brand800 = Color(0xFF13172A)   // Card backgrounds
-val Brand700 = Color(0xFF1C2240)   // Elevated surfaces
-val Brand600 = Color(0xFF252B50)   // Border / divider
+// ── Nocturne palette ──────────────────────────────────────────────────────────
+// The names are kept from the first BeOffline palette so every screen picks the
+// new ground up at once; the values are the ones the redesign is drawn against.
+// Nothing here is a fill-first accent — the accent is a line and a glow.
 
-// Accent: Electric Indigo-Blue gradient
-val AccentPrimary   = Color(0xFF6366F1)  // Indigo 500
-val AccentSecondary = Color(0xFF818CF8)  // Indigo 400
-val AccentGlow      = Color(0xFF4F52C9)  // Pressed state
+/** Screen ground. */
+val Brand900 = Color(0xFF161826)
+/** Cards and rows sitting on the ground. */
+val Brand800 = Color(0xFF232532)
+/** One step up from a card — pressed states, inert tiles. */
+val Brand700 = Color(0xFF292B31)
+/** Hairlines and outlines that should read as structure, not decoration. */
+val Brand600 = Color(0xFF3F424D)
 
-// Status
-val StatusActive   = Color(0xFF34D399)   // Emerald green — VPN running
-val StatusInactive = Color(0xFF6B7280)   // Cool grey — idle
-val StatusDanger   = Color(0xFFF87171)   // Red — warning/error
+/** Darker than the ground — the block overlay and challenge surface. */
+val BrandVoid = Color(0xFF0F1019)
 
-// Text
-val TextPrimary   = Color(0xFFF1F5F9)
-val TextSecondary = Color(0xFF94A3B8)
-val TextDisabled  = Color(0xFF475569)
+// Accent: a muted violet. Used as an outline, a glow, or 10–25% wash — rarely a fill.
+val AccentPrimary   = Color(0xFF9184D9)
+val AccentSecondary = Color(0xFFB5ABFC)
+/** Accent-tinted outline: quieter than AccentPrimary, still clearly "ours". */
+val AccentGlow      = Color(0xFF5D5294)
+/** Text and icons sitting on an accent wash. */
+val AccentBright    = Color(0xFFD2CEFD)
+/** Filled accent surface — own chat bubbles, the live-session card's outline. */
+val AccentSurface   = Color(0xFF423A6A)
+/** Dimmer accent surface — avatars, group tiles. */
+val AccentSurfaceDim = Color(0xFF2B2741)
 
-// Gradient stops used in backgrounds / cards
-val GradientStart = Color(0xFF6366F1)
-val GradientEnd   = Color(0xFF8B5CF6)
+// Status. The redesign has no celebratory green: "active" is simply the accent,
+// and the only saturated colour left is the one that warns.
+val StatusActive   = Color(0xFFB5ABFC)
+val StatusInactive = Color(0xFF595D6C)
+val StatusDanger   = Color(0xFFE08D74)
+
+// Text ramp, brightest to faintest.
+val TextPrimary   = Color(0xFFE9E9ED)
+val TextMuted     = Color(0xFFCFD3E5)
+val TextSecondary = Color(0xFF9397AB)
+val TextTertiary  = Color(0xFF75798C)
+val TextDisabled  = Color(0xFF595D6C)
+
+// Gradient stops kept for the few surfaces that still wash a background.
+val GradientStart = Color(0xFF9184D9)
+val GradientEnd   = Color(0xFF5D5294)

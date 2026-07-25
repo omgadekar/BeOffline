@@ -141,6 +141,10 @@ public sealed class SweepService(IServiceScopeFactory scopeFactory, IConfigurati
         {
             await db.ActivityLogs.Where(l => l.TimestampUtc < cutoff).ExecuteDeleteAsync(ct);
             await db.ErrorLogs.Where(l => l.TimestampUtc < cutoff).ExecuteDeleteAsync(ct);
+            // Solo-unlock rows only matter for the focus session they belong to,
+            // and a focus session is at most a day. Anything past the retention
+            // window is history nobody reads, so it goes with the logs.
+            await db.SoloUnlocks.Where(u => u.ReportedAtUtc < cutoff).ExecuteDeleteAsync(ct);
         }
         catch (Exception ex)
         {
@@ -199,7 +203,7 @@ public sealed class SweepService(IServiceScopeFactory scopeFactory, IConfigurati
                     watcherUid, "TAMPER_ALERT",
                     new { uid, type = "APP_UNINSTALLED_SUSPECTED", lastSeenUtc = lastBeat },
                     "Protection alert",
-                    $"{user.DisplayName ?? "Your partner"}'s BeOffline has gone silent — the app may have been uninstalled.", ct);
+                    $"{Names.First(user.DisplayName)}'s BeOffline has gone silent — the app may have been uninstalled.", ct);
             }
         }
     }

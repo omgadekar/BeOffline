@@ -1,5 +1,8 @@
 package com.beoffline.app.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -54,11 +58,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.beoffline.app.data.model.RuleType
 import com.beoffline.app.ui.theme.AccentPrimary
+import com.beoffline.app.ui.theme.AccentSecondary
+import com.beoffline.app.ui.theme.BoCard
+import com.beoffline.app.ui.theme.BoEyebrow
+import com.beoffline.app.ui.theme.BoPrimaryButton
 import com.beoffline.app.ui.theme.AccentSecondary
 import com.beoffline.app.ui.theme.Brand600
 import com.beoffline.app.ui.theme.Brand700
@@ -66,8 +77,10 @@ import com.beoffline.app.ui.theme.Brand800
 import com.beoffline.app.ui.theme.Brand900
 import com.beoffline.app.ui.theme.StatusDanger
 import com.beoffline.app.ui.theme.TextDisabled
+import com.beoffline.app.ui.theme.TextMuted
 import com.beoffline.app.ui.theme.TextPrimary
 import com.beoffline.app.ui.theme.TextSecondary
+import com.beoffline.app.ui.theme.TextTertiary
 
 /**
  * Creator/editor for App Lock (open-block) rules. Mirrors the internet-block
@@ -111,17 +124,12 @@ fun OpenBlockRuleCreatorScreen(
                     .navigationBarsPadding()
                     .padding(16.dp)
             ) {
-                Button(
+                BoPrimaryButton(
+                    text = "Save app lock",
                     onClick = { viewModel.saveRule(onSaved = onBack) },
                     enabled = uiState.isValid,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
-                ) {
-                    Text("Save App Lock", style = MaterialTheme.typography.labelLarge)
-                }
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     ) { padding ->
@@ -287,50 +295,68 @@ private fun LockSectionCard(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = TextSecondary)
-        Card(
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = Brand800)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), content = content)
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        BoEyebrow(title)
+        BoCard(modifier = Modifier.fillMaxWidth(), content = content)
     }
 }
 
 @Composable
 private fun LockTypeOption(type: RuleType, isSelected: Boolean, onSelect: () -> Unit) {
     val (icon, description) = when (type) {
-        RuleType.PERMANENT -> Icons.Default.Block to "Locked until I turn it off"
-        RuleType.SCHEDULED -> Icons.Default.Schedule to "Locked on a recurring schedule"
-        RuleType.TIMER -> Icons.Default.Timer to "Locked for a set duration"
+        RuleType.PERMANENT -> Icons.Default.Block to "Locked until you turn it off"
+        RuleType.SCHEDULED -> Icons.Default.Schedule to "A window that repeats on chosen days"
+        RuleType.TIMER -> Icons.Default.Timer to "One session of a set length"
+    }
+
+    val title = when (type) {
+        RuleType.PERMANENT -> "Always on"
+        RuleType.SCHEDULED -> "Scheduled"
+        RuleType.TIMER -> "Timer"
     }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (isSelected) AccentPrimary.copy(alpha = 0.12f) else Color.Transparent)
+            .border(
+                1.dp,
+                if (isSelected) AccentPrimary else Color.White.copy(alpha = 0.07f),
+                RoundedCornerShape(10.dp)
+            )
+            .clickable(role = Role.RadioButton, onClick = onSelect)
+            .padding(14.dp)
     ) {
-        RadioButton(
-            selected = isSelected,
-            onClick = onSelect,
-            colors = RadioButtonDefaults.colors(selectedColor = AccentPrimary)
-        )
-        Spacer(Modifier.width(8.dp))
         Icon(
             icon,
             contentDescription = null,
-            tint = if (isSelected) AccentPrimary else TextSecondary,
-            modifier = Modifier.size(20.dp)
+            tint = if (isSelected) AccentSecondary else TextTertiary,
+            modifier = Modifier.size(18.dp)
         )
-        Spacer(Modifier.width(8.dp))
-        Column {
+        Spacer(Modifier.width(13.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = type.name.lowercase().replaceFirstChar { it.uppercase() },
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextPrimary
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (isSelected) TextPrimary else TextMuted
             )
-            Text(description, style = MaterialTheme.typography.bodyMedium, color = TextDisabled)
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isSelected) TextSecondary else TextTertiary,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .size(11.dp)
+                .clip(CircleShape)
+                .background(if (isSelected) AccentPrimary else Color.Transparent)
+                .border(1.dp, if (isSelected) AccentPrimary else Brand600, CircleShape)
+        )
     }
 }
 

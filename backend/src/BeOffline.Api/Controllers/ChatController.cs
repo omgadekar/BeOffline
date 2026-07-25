@@ -38,7 +38,7 @@ public sealed class ChatController(AppDbContext db, INotificationService notifie
         var existing = await db.ChatMessages.FirstOrDefaultAsync(m =>
             m.SenderUid == uid && m.ClientMessageId == request.ClientMessageId);
         if (existing is not null)
-            return ChatMessageDto.From(existing, await DisplayNameAsync(uid));
+            return ChatMessageDto.From(existing, Names.First(await DisplayNameAsync(uid), "A member"));
 
         // Only real co-members can be mentioned (drops junk / self-mentions).
         var memberUids = members.Select(m => m.Uid).ToHashSet();
@@ -60,7 +60,7 @@ public sealed class ChatController(AppDbContext db, INotificationService notifie
         db.ChatMessages.Add(message);
         await db.SaveChangesAsync();
 
-        var senderName = await DisplayNameAsync(uid) ?? "A member";
+        var senderName = Names.First(await DisplayNameAsync(uid), "A member");
         var groupName = (await db.Groups.FindAsync(groupId))?.Name ?? "Group chat";
         var dto = ChatMessageDto.From(message, senderName);
         var preview = body.Length > 120 ? body[..120] + "…" : body;
@@ -98,7 +98,10 @@ public sealed class ChatController(AppDbContext db, INotificationService notifie
             .Where(u => senderUids.Contains(u.Uid))
             .ToDictionaryAsync(u => u.Uid, u => u.DisplayName);
 
-        return messages.Select(m => ChatMessageDto.From(m, names.GetValueOrDefault(m.SenderUid))).ToList();
+        // First name only, matching what the send path stamps on new messages.
+        return messages
+            .Select(m => ChatMessageDto.From(m, Names.First(names.GetValueOrDefault(m.SenderUid), "A member")))
+            .ToList();
     }
 
     private Task<List<GroupMember>> ActiveMembersAsync(Guid groupId) =>

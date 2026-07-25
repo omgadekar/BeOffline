@@ -50,7 +50,7 @@ public sealed class AccountController(AppDbContext db, INotificationService noti
             .Distinct()
             .ToListAsync();
 
-        var displayName = user.DisplayName ?? "Your partner";
+        var displayName = Names.First(user.DisplayName);
 
         // ── Notify before we tear the data down ──────────────────────────────
         foreach (var partnerUid in partnerUids)
@@ -118,6 +118,7 @@ public sealed class AccountController(AppDbContext db, INotificationService noti
         await db.GroupInviteCodes.Where(c => c.IssuerUid == uid).ExecuteDeleteAsync();
         await db.Allowances.Where(a => a.Uid == uid).ExecuteDeleteAsync();
         await db.TamperEvents.Where(t => t.Uid == uid).ExecuteDeleteAsync();
+        await db.SoloUnlocks.Where(u => u.Uid == uid).ExecuteDeleteAsync();
         await db.ChatMessages.Where(m => m.SenderUid == uid).ExecuteDeleteAsync();
         await db.Users.Where(u => u.Uid == uid).ExecuteDeleteAsync();
 

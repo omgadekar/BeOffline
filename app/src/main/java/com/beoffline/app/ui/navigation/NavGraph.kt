@@ -4,27 +4,31 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.ui.screens.AccessibilityDisclosureScreen
-import com.beoffline.app.ui.screens.AccountabilityScreen
 import com.beoffline.app.ui.screens.AppPickerScreen
-import com.beoffline.app.ui.screens.DashboardScreen
 import com.beoffline.app.ui.screens.GroupChatScreen
-import com.beoffline.app.ui.screens.GroupsScreen
+import com.beoffline.app.ui.screens.MainShell
 import com.beoffline.app.ui.screens.OpenBlockRuleCreatorScreen
 import com.beoffline.app.ui.screens.OpenBlockRuleCreatorViewModel
-import com.beoffline.app.ui.screens.OpenBlockScreen
 import com.beoffline.app.ui.screens.RuleCreatorScreen
 import com.beoffline.app.ui.screens.RuleCreatorViewModel
+import com.beoffline.app.ui.screens.ShellTab
 
 sealed class Screen(val route: String) {
-    object Dashboard : Screen("dashboard")
+    /** The tabbed shell: Home, Rules, App Lock, Social, Settings. */
+    object Shell : Screen("shell")
+
     object RuleCreator : Screen("rule_creator?ruleId={ruleId}") {
         fun createRoute(ruleId: Int? = null) =
             buildString {
@@ -35,7 +39,6 @@ sealed class Screen(val route: String) {
     object AppPicker : Screen("app_picker")
 
     // ── App Lock (open-block) feature area ────────────────────────────────
-    object OpenBlock : Screen("open_block")
     object OpenBlockDisclosure : Screen("open_block_disclosure")
     object OpenBlockRuleCreator : Screen("open_block_rule_creator?ruleId={ruleId}") {
         fun createRoute(ruleId: Int? = null) =
@@ -45,8 +48,6 @@ sealed class Screen(val route: String) {
             }
     }
     object OpenBlockAppPicker : Screen("open_block_app_picker")
-    object Accountability : Screen("accountability")
-    object Groups : Screen("groups")
     object GroupChat : Screen("group_chat/{groupId}") {
         fun createRoute(groupId: String) = "group_chat/$groupId"
     }
@@ -59,26 +60,43 @@ fun BeOfflineNavGraph(
     onNavRouteHandled: () -> Unit = {}
 ) {
     val navController = rememberNavController()
+    var selectedTab by rememberSaveable { mutableStateOf(ShellTab.Home) }
 
-    // Notification deep-link: navigate once to the requested route, then clear it
-    // so rotation/recomposition doesn't re-trigger the jump.
+    // Notification deep-link: navigate once to the requested route, then clear
+    // it so rotation/recomposition doesn't re-trigger the jump. Anything that
+    // used to be its own screen but now lives in a tab resolves to selecting
+    // that tab instead of pushing a destination.
     val route by navRoute.collectAsState()
     LaunchedEffect(route) {
         val target = route ?: return@LaunchedEffect
-        navController.navigate(target) { launchSingleTop = true }
+        when (target) {
+            AccountabilityRepository.ROUTE_ACCOUNTABILITY,
+            AccountabilityRepository.ROUTE_GROUPS -> {
+                selectedTab = ShellTab.Social
+                navController.popBackStack(Screen.Shell.route, inclusive = false)
+            }
+            else -> navController.navigate(target) { launchSingleTop = true }
+        }
         onNavRouteHandled()
     }
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Dashboard.route
+        startDestination = Screen.Shell.route
     ) {
-        composable(Screen.Dashboard.route) {
-            DashboardScreen(
+        composable(Screen.Shell.route) {
+            MainShell(
+                selectedTab = selectedTab,
+                onSelectTab = { selectedTab = it },
+                onRequestVpn = onRequestVpn,
                 onCreateRule = { navController.navigate(Screen.RuleCreator.createRoute()) },
                 onEditRule = { ruleId -> navController.navigate(Screen.RuleCreator.createRoute(ruleId)) },
-                onRequestVpn = onRequestVpn,
-                onOpenAppLock = { navController.navigate(Screen.OpenBlock.route) }
+                onCreateLock = { navController.navigate(Screen.OpenBlockRuleCreator.createRoute()) },
+                onEditLock = { ruleId ->
+                    navController.navigate(Screen.OpenBlockRuleCreator.createRoute(ruleId))
+                },
+                onShowDisclosure = { navController.navigate(Screen.OpenBlockDisclosure.route) },
+                onOpenChat = { groupId -> navController.navigate(Screen.GroupChat.createRoute(groupId)) }
             )
         }
 
@@ -111,34 +129,6 @@ fun BeOfflineNavGraph(
         }
 
         // ── App Lock (open-block) feature area ────────────────────────────
-
-        composable(Screen.OpenBlock.route) {
-            OpenBlockScreen(
-                onBack = { navController.popBackStack() },
-                onCreateRule = { navController.navigate(Screen.OpenBlockRuleCreator.createRoute()) },
-                onEditRule = { ruleId ->
-                    navController.navigate(Screen.OpenBlockRuleCreator.createRoute(ruleId))
-                },
-                onShowDisclosure = { navController.navigate(Screen.OpenBlockDisclosure.route) },
-                onOpenAccountability = { navController.navigate(Screen.Accountability.route) }
-            )
-        }
-
-        composable(Screen.Accountability.route) {
-            AccountabilityScreen(
-                onBack = { navController.popBackStack() },
-                onOpenGroups = { navController.navigate(Screen.Groups.route) }
-            )
-        }
-
-        composable(Screen.Groups.route) {
-            GroupsScreen(
-                onBack = { navController.popBackStack() },
-                onOpenChat = { groupId ->
-                    navController.navigate(Screen.GroupChat.createRoute(groupId))
-                }
-            )
-        }
 
         composable(Screen.GroupChat.route) {
             GroupChatScreen(onBack = { navController.popBackStack() })

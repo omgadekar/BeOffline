@@ -24,6 +24,7 @@ import com.beoffline.app.data.model.ChatMessageCache
 import com.beoffline.app.data.model.GroupCache
 import com.beoffline.app.data.model.OutboxItem
 import com.beoffline.app.data.model.Partner
+import com.beoffline.app.util.firstName
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.gson.Gson
@@ -62,6 +63,7 @@ class AccountabilityRepository @Inject constructor(
         private const val OUTBOX_UNLOCK_REQUEST = "UNLOCK_REQUEST"
         private const val OUTBOX_TAMPER = "TAMPER_EVENT"
         private const val OUTBOX_CHAT = "CHAT_MESSAGE"
+        private const val OUTBOX_SOLO_UNLOCK = "SOLO_UNLOCK"
 
         /** Notification → NavGraph deep-link. Read by MainActivity. */
         const val EXTRA_NAV_ROUTE = "beoffline.nav_route"
@@ -94,6 +96,11 @@ class AccountabilityRepository @Inject constructor(
 
     /** Oldest-joined group — the overlay's "Ask my group" target (v1: no chooser). */
     suspend fun firstGroup(): GroupCache? = groupCacheDao.getAllOnce().firstOrNull()
+
+    /** The single partner's stored display name, for the overlay's "Ask …" button. */
+    suspend fun firstPartnerName(): String? =
+        if (FirebaseAuth.getInstance().currentUser == null) null
+        else partnerDao.getActiveOnce().firstOrNull()?.partnerName
 
     // ── Pairing ───────────────────────────────────────────────────────────────
 
@@ -276,6 +283,56 @@ class AccountabilityRepository @Inject constructor(
         OutboxWorker.enqueue(context)
     }
 
+    // ── Unlock challenges ─────────────────────────────────────────────────────
+
+    /**
+     * The server's escalation level for this rule's current focus session, or
+     * null when signed out or unreachable. Never throws for the signed-out
+     * case: solo challenges work perfectly well with no account at all, and
+     * that path must not pay for a network round trip.
+     */
+    suspend fun fetchChallengeLevel(ruleKey: String, sessionKey: String): Int? {
+        if (FirebaseAuth.getInstance().currentUser == null) return null
+        return api.challengeLevel(ruleKey, sessionKey).level
+    }
+
+    /**
+     * Queues a solved solo challenge. Goes through the outbox like every other
+     * write: the unlock has already been granted locally, so this must never be
+     * the thing that fails and it must never be sent twice.
+     */
+    suspend fun reportSoloUnlock(
+        ruleKey: String,
+        sessionKey: String,
+        level: Int,
+        kind: String,
+        packageName: String,
+        appLabel: String,
+        grantedMinutes: Int
+    ) {
+        if (FirebaseAuth.getInstance().currentUser == null) return
+        val clientEventId = "$ruleKey-$sessionKey-$level"
+        val body = SoloUnlockBody(
+            clientEventId = clientEventId,
+            ruleKey = ruleKey,
+            sessionKey = sessionKey,
+            level = level,
+            kind = kind,
+            packageName = packageName,
+            appLabel = appLabel,
+            grantedMinutes = grantedMinutes,
+            occurredAtUtc = Instant.now().toString()
+        )
+        outboxDao.insert(
+            OutboxItem(
+                type = OUTBOX_SOLO_UNLOCK,
+                clientKey = clientEventId,
+                payloadJson = gson.toJson(body)
+            )
+        )
+        OutboxWorker.enqueue(context)
+    }
+
     // ── Devices ───────────────────────────────────────────────────────────────
 
     fun deviceId(): String = prefs.getString(KEY_DEVICE_ID, null) ?: UUID.randomUUID().toString()
@@ -323,6 +380,10 @@ class AccountabilityRepository @Inject constructor(
                         val body = gson.fromJson(item.payloadJson, TamperBody::class.java)
                         api.reportTamper(body)
                     }
+                    OUTBOX_SOLO_UNLOCK -> {
+                        val body = gson.fromJson(item.payloadJson, SoloUnlockBody::class.java)
+                        api.recordSoloUnlock(body)
+                    }
                     OUTBOX_CHAT -> {
                         val payload = gson.fromJson(item.payloadJson, ChatOutboxPayload::class.java)
                         val dto = api.sendChatMessage(
@@ -354,7 +415,7 @@ class AccountabilityRepository @Inject constructor(
                 requestCacheDao.upsert(dto.toEntity("INCOMING"))
                 notify(
                     dto.id.hashCode(),
-                    "${dto.requesterName ?: "Your partner"} asks to open ${dto.appLabel}",
+                    "${dto.requesterName.firstName()} asks to open ${dto.appLabel}",
                     "Open BeOffline to approve or deny.",
                     route = ROUTE_ACCOUNTABILITY
                 )
@@ -390,7 +451,7 @@ class AccountabilityRepository @Inject constructor(
                 notify(
                     dto.id.hashCode(),
                     "Request resolved",
-                    "${dto.resolvedByName ?: "Another member"} already responded for ${dto.appLabel}.",
+                    "${dto.resolvedByName.firstName(fallback = "Another member")} already responded for ${dto.appLabel}.",
                     route = ROUTE_ACCOUNTABILITY
                 )
             }
@@ -426,13 +487,18 @@ class AccountabilityRepository @Inject constructor(
                     if (mentionedMe) {
                         notify(
                             dto.conversationKey.hashCode(),
-                            "${dto.senderName ?: "Someone"} mentioned you",
+                            "${dto.senderName.firstName(fallback = "Someone")} mentioned you",
                             preview,
                             route = route,
                             highlight = true
                         )
                     } else {
-                        notify(dto.conversationKey.hashCode(), dto.senderName ?: "Group chat", preview, route = route)
+                        notify(
+                            dto.conversationKey.hashCode(),
+                            dto.senderName.firstName(fallback = "Group chat"),
+                            preview,
+                            route = route
+                        )
                     }
                 }
             }

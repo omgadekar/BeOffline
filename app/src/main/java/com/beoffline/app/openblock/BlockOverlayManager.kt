@@ -7,38 +7,31 @@ import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -56,14 +49,17 @@ import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.data.model.GroupCache
 import com.beoffline.app.data.model.OpenBlockRule
 import com.beoffline.app.data.repository.BlockRuleRepository
+import com.beoffline.app.ui.challenge.ChallengeSurface
+import com.beoffline.app.ui.theme.AccentBright
 import com.beoffline.app.ui.theme.AccentPrimary
 import com.beoffline.app.ui.theme.BeOfflineTheme
-import com.beoffline.app.ui.theme.Brand700
-import com.beoffline.app.ui.theme.Brand900
-import com.beoffline.app.ui.theme.StatusDanger
+import com.beoffline.app.ui.theme.BoPrimaryButton
+import com.beoffline.app.ui.theme.BoSecondaryButton
+import com.beoffline.app.ui.theme.BrandVoid
 import com.beoffline.app.ui.theme.TextDisabled
 import com.beoffline.app.ui.theme.TextPrimary
 import com.beoffline.app.ui.theme.TextSecondary
+import com.beoffline.app.util.firstName
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,19 +72,22 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * BlockOverlayManager — the full-screen "app blocked" surface, now hosting the
- * M2 solo-teaser unlock flow.
+ * BlockOverlayManager — the full-screen "app blocked" surface, hosting the solo
+ * unlock challenge.
  *
- * Window strategy unchanged from M1: TYPE_ACCESSIBILITY_OVERLAY via the
- * service (no extra permission) → TYPE_APPLICATION_OVERLAY if granted →
- * send-home only. The teaser deliberately uses an in-overlay numpad so the
- * window can stay FLAG_NOT_FOCUSABLE (no IME/focus juggling).
+ * Window strategy unchanged: TYPE_ACCESSIBILITY_OVERLAY via the service (no
+ * extra permission) → TYPE_APPLICATION_OVERLAY if granted → send-home only.
+ *
+ * The window is FLAG_NOT_FOCUSABLE by default so the numpad, tile and hold
+ * challenges never fight the IME for focus. The Retype challenge is the one
+ * kind that genuinely needs a keyboard, so the overlay drops that flag for the
+ * duration of that stage and puts it straight back afterwards.
  */
 @Singleton
 class BlockOverlayManager @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val blockRuleRepository: BlockRuleRepository,
-    private val teaserController: TeaserController,
+    private val challengeController: ChallengeController,
     private val accountabilityRepository: AccountabilityRepository
 ) {
     companion object {
@@ -101,6 +100,7 @@ class BlockOverlayManager @Inject constructor(
     private var serviceRef: WeakReference<AccessibilityService>? = null
     private var overlayView: ComposeView? = null
     private var overlayWindowManager: WindowManager? = null
+    private var overlayParams: WindowManager.LayoutParams? = null
     private var lifecycleHost: OverlayLifecycleHost? = null
     private var dismissJob: Job? = null
 
@@ -116,10 +116,10 @@ class BlockOverlayManager @Inject constructor(
     fun showBlockScreen(packageName: String, untilText: String?, rule: OpenBlockRule? = null) {
         mainScope.launch {
             val appName = resolveAppName(packageName)
-            val hasPartner = try {
-                accountabilityRepository.hasPartner()
+            val partnerName = try {
+                accountabilityRepository.firstPartnerName()
             } catch (_: Exception) {
-                false
+                null
             }
             // v1: no in-overlay chooser — the oldest-joined group is the target.
             val group = try {
@@ -128,7 +128,7 @@ class BlockOverlayManager @Inject constructor(
                 null
             }
             try {
-                showOverlay(appName, packageName, untilText, rule, hasPartner, group)
+                showOverlay(appName, packageName, untilText, rule, partnerName, group)
             } catch (e: Exception) {
                 // Never let overlay failure break enforcement — send-home already happened.
                 Log.e(TAG, "Failed to show block overlay", e)
@@ -146,10 +146,31 @@ class BlockOverlayManager @Inject constructor(
         }
     }
 
-    /** Called when the user enters the teaser — the overlay must stay up. */
+    /** Called when the user enters the challenge — the overlay must stay up. */
     private fun cancelAutoDismiss() {
         dismissJob?.cancel()
         dismissJob = null
+    }
+
+    /**
+     * Hands focus to the overlay so the soft keyboard can attach, or takes it
+     * back. Only the Retype challenge asks for this.
+     */
+    private fun setFocusable(focusable: Boolean) {
+        val view = overlayView ?: return
+        val params = overlayParams ?: return
+        val alreadyFocusable = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE == 0
+        if (alreadyFocusable == focusable) return
+        params.flags = if (focusable) {
+            params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+        } else {
+            params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        try {
+            overlayWindowManager?.updateViewLayout(view, params)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not change overlay focusability", e)
+        }
     }
 
     private suspend fun resolveAppName(packageName: String): String =
@@ -165,7 +186,7 @@ class BlockOverlayManager @Inject constructor(
         packageName: String,
         untilText: String?,
         rule: OpenBlockRule?,
-        hasPartner: Boolean,
+        partnerName: String?,
         group: GroupCache?
     ) {
         val service = serviceRef?.get()
@@ -191,16 +212,19 @@ class BlockOverlayManager @Inject constructor(
                     packageName = packageName,
                     untilText = untilText,
                     rule = rule,
-                    hasPartner = hasPartner,
+                    partnerName = partnerName,
                     groupName = group?.name,
-                    teaserController = teaserController,
+                    challengeController = challengeController,
                     askPartner = { accountabilityRepository.enqueueUnlockRequest(packageName, appName) },
                     askGroup = {
                         group?.let {
-                            accountabilityRepository.enqueueUnlockRequest(packageName, appName, groupId = it.groupId)
+                            accountabilityRepository.enqueueUnlockRequest(
+                                packageName, appName, groupId = it.groupId
+                            )
                         }
                     },
-                    onTeaserStarted = ::cancelAutoDismiss,
+                    onChallengeStarted = ::cancelAutoDismiss,
+                    onNeedsKeyboard = ::setFocusable,
                     onDismiss = { mainScope.launch { hideNow() } }
                 )
             }
@@ -227,11 +251,14 @@ class BlockOverlayManager @Inject constructor(
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
-        )
+        ).apply {
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        }
 
         windowManager.addView(view, params)
         overlayView = view
         overlayWindowManager = windowManager
+        overlayParams = params
         lifecycleHost = host
         host.onResume()
     }
@@ -249,6 +276,7 @@ class BlockOverlayManager @Inject constructor(
         lifecycleHost = null
         overlayView = null
         overlayWindowManager = null
+        overlayParams = null
     }
 }
 
@@ -284,10 +312,8 @@ private class OverlayLifecycleHost : LifecycleOwner, ViewModelStoreOwner, SavedS
 
 private sealed interface OverlayStage {
     data object Blocked : OverlayStage
-    data class Countdown(val difficulty: TeaserEngine.Difficulty) : OverlayStage
-    data class Solving(val difficulty: TeaserEngine.Difficulty) : OverlayStage
-    data class Granted(val minutes: Int) : OverlayStage
-    /** [target] names who was asked — "your partner" or the group's name. */
+    data class Challenge(val level: Int, val kind: ChallengeKind) : OverlayStage
+    /** [target] names who was asked — a partner's first name or the group's name. */
     data class AskSent(val target: String) : OverlayStage
 }
 
@@ -297,58 +323,55 @@ private fun BlockOverlayRoot(
     packageName: String,
     untilText: String?,
     rule: OpenBlockRule?,
-    hasPartner: Boolean,
+    partnerName: String?,
     groupName: String?,
-    teaserController: TeaserController,
+    challengeController: ChallengeController,
     askPartner: suspend () -> Unit,
     askGroup: suspend () -> Unit,
-    onTeaserStarted: () -> Unit,
+    onChallengeStarted: () -> Unit,
+    onNeedsKeyboard: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     var stage by remember { mutableStateOf<OverlayStage>(OverlayStage.Blocked) }
     val scope = rememberCoroutineScope()
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brand900.copy(alpha = 0.97f)),
+        modifier = Modifier.fillMaxSize().background(BrandVoid),
         contentAlignment = Alignment.Center
     ) {
-        when (val s = stage) {
+        when (val current = stage) {
             is OverlayStage.Blocked -> BlockedStage(
                 appName = appName,
                 untilText = untilText,
                 showUnlock = rule != null,
-                showAskPartner = hasPartner,
+                partnerName = partnerName,
                 askGroupName = groupName,
                 onDismiss = onDismiss,
                 onUnlock = {
                     if (rule != null) {
-                        onTeaserStarted()
+                        onChallengeStarted()
                         scope.launch {
-                            val level = teaserController.currentLevel(rule)
-                            val difficulty = TeaserEngine.difficultyFor(level)
-                            stage = if (difficulty.preWaitSeconds > 0) {
-                                OverlayStage.Countdown(difficulty)
-                            } else {
-                                OverlayStage.Solving(difficulty)
-                            }
+                            val level = challengeController.currentLevel(rule)
+                            stage = OverlayStage.Challenge(
+                                level = level,
+                                kind = challengeController.kindFor(rule, level)
+                            )
                         }
                     }
                 },
                 onAskPartner = {
-                    onTeaserStarted() // pause auto-dismiss while we queue
+                    onChallengeStarted() // pause auto-dismiss while we queue
                     scope.launch {
                         try {
                             askPartner()
                         } catch (_: Exception) {
                             // Outbox insert is local; a failure here is exceptional.
                         }
-                        stage = OverlayStage.AskSent("your partner")
+                        stage = OverlayStage.AskSent(partnerName ?: "your partner")
                     }
                 },
                 onAskGroup = {
-                    onTeaserStarted()
+                    onChallengeStarted()
                     scope.launch {
                         try {
                             askGroup()
@@ -370,60 +393,42 @@ private fun BlockOverlayRoot(
                     modifier = Modifier.padding(32.dp)
                 ) {
                     Text(
-                        text = "Request sent to ${s.target}.",
-                        style = MaterialTheme.typography.titleMedium,
+                        text = "Request sent to ${current.target}.",
+                        style = MaterialTheme.typography.titleLarge,
                         color = TextPrimary
                     )
                     Text(
                         // Fail-closed, stated plainly: nothing unlocks until approval.
                         text = "You'll get a notification when someone responds. $appName stays blocked until then — if you're offline, the request goes out once you reconnect.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = TextSecondary,
                         textAlign = TextAlign.Center
                     )
                 }
             }
 
-            is OverlayStage.Countdown -> CountdownStage(
-                difficulty = s.difficulty,
-                onFinished = { stage = OverlayStage.Solving(s.difficulty) },
-                onCancel = onDismiss
-            )
-
-            is OverlayStage.Solving -> SolvingStage(
-                difficulty = s.difficulty,
-                onSolved = {
+            is OverlayStage.Challenge -> ChallengeSurface(
+                appName = appName,
+                level = current.level,
+                kind = current.kind,
+                rewardMinutes = challengeController.allowanceMinutes(),
+                onNeedsKeyboard = onNeedsKeyboard,
+                onSolved = { solvedKind ->
                     scope.launch {
-                        val minutes = teaserController.recordSuccess(rule!!, packageName)
-                        stage = OverlayStage.Granted(minutes)
+                        rule?.let {
+                            challengeController.recordSuccess(
+                                rule = it,
+                                packageName = packageName,
+                                appLabel = appName,
+                                kind = solvedKind
+                            )
+                        }
+                        delay(3_000)
+                        onDismiss()
                     }
                 },
                 onCancel = onDismiss
             )
-
-            is OverlayStage.Granted -> {
-                LaunchedEffect(Unit) {
-                    delay(2_500)
-                    onDismiss()
-                }
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(32.dp)
-                ) {
-                    // Deliberately flat: no celebration, no color, no praise.
-                    Text(
-                        text = "Unlocked for ${s.minutes} minute${if (s.minutes != 1) "s" else ""}.",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "Open $appName again to use it.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary
-                    )
-                }
-            }
         }
     }
 }
@@ -433,7 +438,7 @@ private fun BlockedStage(
     appName: String,
     untilText: String?,
     showUnlock: Boolean,
-    showAskPartner: Boolean,
+    partnerName: String?,
     askGroupName: String?,
     onDismiss: () -> Unit,
     onUnlock: () -> Unit,
@@ -442,206 +447,61 @@ private fun BlockedStage(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(32.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
     ) {
         Icon(
-            imageVector = Icons.Default.Lock,
+            imageVector = Icons.Outlined.Lock,
             contentDescription = null,
             tint = AccentPrimary,
-            modifier = Modifier.size(64.dp)
+            modifier = Modifier.size(40.dp)
         )
         Text(
-            text = "$appName is blocked",
-            style = MaterialTheme.typography.headlineSmall,
+            text = "$appName is locked",
+            style = MaterialTheme.typography.headlineMedium,
             color = TextPrimary,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 6.dp)
         )
         Text(
-            text = untilText ?: "Stay focused — this app is off-limits right now.",
+            text = untilText ?: "You chose to put this away for now.",
             style = MaterialTheme.typography.bodyLarge,
             color = TextSecondary,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 280.dp).padding(bottom = 14.dp)
         )
-        Button(
-            onClick = onDismiss,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = AccentPrimary,
-                contentColor = Color.White
+
+        if (showUnlock) {
+            BoPrimaryButton(
+                text = "Unlock with a challenge",
+                onClick = onUnlock,
+                modifier = Modifier.fillMaxWidth()
             )
-        ) {
-            Text("OK")
         }
-        if (showAskPartner) {
-            TextButton(onClick = onAskPartner) {
-                Text("Ask my partner to unlock", color = TextSecondary)
-            }
+        if (partnerName != null) {
+            BoSecondaryButton(
+                // First name only — this is a person, addressed the way you'd
+                // say their name out loud.
+                text = "Ask ${partnerName.firstName()}",
+                onClick = onAskPartner,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
         if (askGroupName != null) {
-            TextButton(onClick = onAskGroup) {
-                Text("Ask $askGroupName to unlock", color = TextSecondary)
-            }
-        }
-        if (showUnlock) {
-            TextButton(onClick = onUnlock) {
-                Text("Solve a challenge to unlock", color = TextSecondary)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CountdownStage(
-    difficulty: TeaserEngine.Difficulty,
-    onFinished: () -> Unit,
-    onCancel: () -> Unit
-) {
-    var secondsLeft by remember { mutableIntStateOf(difficulty.preWaitSeconds) }
-
-    LaunchedEffect(Unit) {
-        while (secondsLeft > 0) {
-            delay(1_000)
-            secondsLeft--
-        }
-        onFinished()
-    }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.padding(32.dp)
-    ) {
-        Text(
-            text = "Wait ${secondsLeft}s",
-            style = MaterialTheme.typography.headlineMedium,
-            color = TextPrimary
-        )
-        Text(
-            text = "This wait cannot be skipped. Unlock #${difficulty.level + 1} this session.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary,
-            textAlign = TextAlign.Center
-        )
-        TextButton(onClick = onCancel) {
-            Text("Never mind", color = TextDisabled)
-        }
-    }
-}
-
-@Composable
-private fun SolvingStage(
-    difficulty: TeaserEngine.Difficulty,
-    onSolved: () -> Unit,
-    onCancel: () -> Unit
-) {
-    var problems by remember { mutableStateOf(TeaserEngine.generateProblems(difficulty)) }
-    var index by remember { mutableIntStateOf(0) }
-    var input by remember { mutableStateOf("") }
-    var wrongFlash by remember { mutableStateOf(false) }
-
-    fun submit() {
-        val answer = input.toIntOrNull()
-        if (answer != null && answer == problems[index].answer) {
-            wrongFlash = false
-            input = ""
-            if (index + 1 >= problems.size) {
-                onSolved()
-            } else {
-                index++
-            }
-        } else {
-            // Any mistake restarts the whole set with fresh problems.
-            problems = TeaserEngine.generateProblems(difficulty)
-            index = 0
-            input = ""
-            wrongFlash = true
-        }
-    }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 32.dp)
-    ) {
-        Text(
-            text = "Problem ${index + 1} of ${problems.size}",
-            style = MaterialTheme.typography.labelLarge,
-            color = TextSecondary
-        )
-        if (wrongFlash) {
-            Text(
-                text = "Wrong. Starting over.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = StatusDanger
+            BoSecondaryButton(
+                text = "Ask $askGroupName",
+                onClick = onAskGroup,
+                modifier = Modifier.fillMaxWidth()
             )
         }
         Text(
-            text = problems[index].text,
-            style = MaterialTheme.typography.headlineLarge,
-            color = TextPrimary
+            text = "Close",
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextDisabled,
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .clickable(role = Role.Button, onClick = onDismiss)
+                .padding(8.dp)
         )
-        Text(
-            text = if (input.isEmpty()) " " else input,
-            style = MaterialTheme.typography.headlineSmall,
-            color = AccentPrimary
-        )
-
-        OverlayNumpad(
-            onDigit = { d -> if (input.length < 6) { input += d; wrongFlash = false } },
-            onBackspace = { input = input.dropLast(1) },
-            onSubmit = { if (input.isNotEmpty()) submit() }
-        )
-
-        TextButton(onClick = onCancel) {
-            Text("Never mind", color = TextDisabled)
-        }
-    }
-}
-
-@Composable
-private fun OverlayNumpad(
-    onDigit: (Char) -> Unit,
-    onBackspace: () -> Unit,
-    onSubmit: () -> Unit
-) {
-    val rows = listOf(
-        listOf("1", "2", "3"),
-        listOf("4", "5", "6"),
-        listOf("7", "8", "9"),
-        listOf("⌫", "0", "OK")
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        rows.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { key ->
-                    OutlinedButton(
-                        onClick = {
-                            when (key) {
-                                "⌫" -> onBackspace()
-                                "OK" -> onSubmit()
-                                else -> onDigit(key[0])
-                            }
-                        },
-                        modifier = Modifier
-                            .width(84.dp)
-                            .height(52.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = if (key == "OK") AccentPrimary.copy(alpha = 0.25f) else Brand700
-                        )
-                    ) {
-                        Text(
-                            text = key,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary
-                        )
-                    }
-                }
-            }
-        }
     }
 }

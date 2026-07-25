@@ -65,6 +65,7 @@ import com.beoffline.app.ui.theme.Brand900
 import com.beoffline.app.ui.theme.TextDisabled
 import com.beoffline.app.ui.theme.TextPrimary
 import com.beoffline.app.ui.theme.TextSecondary
+import com.beoffline.app.util.firstName
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -82,6 +83,7 @@ fun GroupChatScreen(
     val memberCount by viewModel.memberCount.collectAsState()
     val members by viewModel.members.collectAsState()
     val mentionNames by viewModel.mentionNames.collectAsState()
+    val chatNames by viewModel.chatNames.collectAsState()
     val listState = rememberLazyListState()
     var input by remember { mutableStateOf(TextFieldValue("")) }
     val myUid = viewModel.myUid
@@ -157,7 +159,8 @@ fun GroupChatScreen(
                                 item = item,
                                 mentionNames = mentionNames,
                                 mentionsMe = myUid != null &&
-                                    item.message.mentionedUids?.split(",")?.contains(myUid) == true
+                                    item.message.mentionedUids?.split(",")?.contains(myUid) == true,
+                                chatNames = chatNames
                             )
                         }
                     }
@@ -234,22 +237,35 @@ private fun DayDivider(label: String) {
 }
 
 @Composable
-private fun MessageRow(item: ChatItem.Msg, mentionNames: List<String>, mentionsMe: Boolean) {
+private fun MessageRow(
+    item: ChatItem.Msg,
+    mentionNames: List<String>,
+    mentionsMe: Boolean,
+    chatNames: Map<String, String>
+) {
     val message = item.message
+    // First name only. A member who has since left the group isn't in the map,
+    // so fall back to shortening whatever name rode along with the message.
+    val senderName = chatNames[message.senderUid] ?: message.senderName.firstName(fallback = "Member")
     if (item.mine) {
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-            Bubble(message = message, mine = true, mentionNames = mentionNames, mentionsMe = false)
+            Bubble(
+                message = message, mine = true, senderName = senderName,
+                mentionNames = mentionNames, mentionsMe = false
+            )
         }
     } else {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             if (item.showHeader) {
-                Avatar(name = message.senderName, seed = message.senderUid)
+                Avatar(name = senderName, seed = message.senderUid)
             } else {
                 Spacer(Modifier.width(32.dp))
             }
             Spacer(Modifier.width(8.dp))
-            Bubble(message = message, mine = false, showName = item.showHeader,
-                mentionNames = mentionNames, mentionsMe = mentionsMe)
+            Bubble(
+                message = message, mine = false, showName = item.showHeader,
+                senderName = senderName, mentionNames = mentionNames, mentionsMe = mentionsMe
+            )
         }
     }
 }
@@ -258,6 +274,7 @@ private fun MessageRow(item: ChatItem.Msg, mentionNames: List<String>, mentionsM
 private fun Bubble(
     message: ChatMessageCache,
     mine: Boolean,
+    senderName: String,
     showName: Boolean = false,
     mentionNames: List<String>,
     mentionsMe: Boolean
@@ -278,7 +295,7 @@ private fun Bubble(
     ) {
         if (!mine && showName) {
             Text(
-                message.senderName ?: "Member",
+                senderName,
                 style = MaterialTheme.typography.labelMedium,
                 color = avatarColor(message.senderUid),
                 fontWeight = FontWeight.SemiBold

@@ -2,18 +2,23 @@ package com.beoffline.app
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Color
 import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.accountability.RealtimeClient
 import com.beoffline.app.ui.navigation.BeOfflineNavGraph
 import com.beoffline.app.ui.theme.BeOfflineTheme
+import com.beoffline.app.ui.theme.Brand900
 import com.beoffline.app.vpn.VpnController
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,11 +55,19 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Draw behind the status and navigation bars: the app's ground should
+        // run to the physical edges of the screen, not stop at a black band.
+        // Every screen pads its own content off the bars via WindowInsets, and
+        // the bottom nav sits above the gesture/button bar rather than under it.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+        )
         super.onCreate(savedInstanceState)
         navRoute.value = intent?.getStringExtra(AccountabilityRepository.EXTRA_NAV_ROUTE)
         setContent {
             BeOfflineTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxSize().background(Brand900)) {
                     BeOfflineNavGraph(
                         onRequestVpn = ::requestVpnPermission,
                         navRoute = navRoute,

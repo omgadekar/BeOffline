@@ -9,6 +9,7 @@ import com.beoffline.app.data.model.OpenBlockRule
 import com.beoffline.app.data.model.RuleType
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.data.repository.OpenBlockRuleRepository
+import com.beoffline.app.openblock.ChallengeKind
 import com.beoffline.app.openblock.OpenBlockController
 import com.beoffline.app.openblock.OpenBlockPrefs
 import com.beoffline.app.scheduler.OpenBlockScheduler
@@ -29,8 +30,10 @@ data class OpenBlockUiState(
     /** Live binding state — false right after revocation even if settings lag. */
     val serviceConnected: Boolean = false,
     val disclosureAccepted: Boolean = false,
-    /** Minutes a solved teaser unlocks an app for (user preference). */
+    /** Minutes a solved challenge unlocks an app for (user preference). */
     val teaserAllowanceMinutes: Int = OpenBlockPrefs.DEFAULT_TEASER_ALLOWANCE_MINUTES,
+    /** Which challenge kinds a locked app is allowed to ask for. */
+    val enabledChallengeKinds: Set<ChallengeKind> = ChallengeKind.entries.toSet(),
     val isLoading: Boolean = true,
     /** Transient user-facing note (e.g. why a lock can't be deleted right now). */
     val message: String? = null
@@ -68,6 +71,9 @@ class OpenBlockViewModel @Inject constructor(
             teaserAllowanceMinutes = prefs.getInt(
                 OpenBlockPrefs.KEY_TEASER_ALLOWANCE_MINUTES,
                 OpenBlockPrefs.DEFAULT_TEASER_ALLOWANCE_MINUTES
+            ),
+            enabledChallengeKinds = OpenBlockPrefs.parseKinds(
+                prefs.getString(OpenBlockPrefs.KEY_ENABLED_CHALLENGE_KINDS, null)
             )
         )
     )
@@ -117,6 +123,26 @@ class OpenBlockViewModel @Inject constructor(
     fun setTeaserAllowanceMinutes(minutes: Int) {
         prefs.edit().putInt(OpenBlockPrefs.KEY_TEASER_ALLOWANCE_MINUTES, minutes).apply()
         _uiState.update { it.copy(teaserAllowanceMinutes = minutes) }
+    }
+
+    /**
+     * Switches one challenge kind on or off. Turning the last one off would
+     * leave an unlock with no friction at all, so that toggle is refused rather
+     * than silently ignored — the user should know why it didn't move.
+     */
+    fun toggleChallengeKind(kind: ChallengeKind) {
+        val current = _uiState.value.enabledChallengeKinds
+        val next = if (kind in current) current - kind else current + kind
+        if (next.isEmpty()) {
+            _uiState.update {
+                it.copy(message = "Keep at least one challenge kind — otherwise a locked app opens for free.")
+            }
+            return
+        }
+        prefs.edit()
+            .putString(OpenBlockPrefs.KEY_ENABLED_CHALLENGE_KINDS, OpenBlockPrefs.storeKinds(next))
+            .apply()
+        _uiState.update { it.copy(enabledChallengeKinds = next) }
     }
 
     private suspend fun resolveAppNames(rules: List<OpenBlockRule>) {

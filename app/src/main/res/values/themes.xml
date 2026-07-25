@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Base theme: uses Theme.Material3.DayNight which is available from Material3 lib.
-         Compose takes over all UI rendering so the XML theme just needs to be a valid base. -->
+    <!-- Compose draws everything; this theme only has to hand it a window that
+         doesn't fight it. The bars are transparent and the window background is
+         the app's own ground, so the UI runs edge to edge instead of sitting in
+         a black frame — which looked especially wrong on devices with the
+         three-button nav bar. -->
     <style name="Theme.BeOffline" parent="android:Theme.Black.NoTitleBar">
-        <item name="android:windowBackground">@android:color/black</item>
-        <item name="android:statusBarColor">#000000</item>
-        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowBackground">@color/bo_ground</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <!-- Dark ground → light icons in both bars. -->
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

@@ -240,8 +240,11 @@ Implemented end to end:
 > **Honest by design**
 > BeOffline doesn't pretend to be a cage. You can always turn it off — but if you back out of a lock while a partner is holding you accountable, they're told, and turning off takes a cooldown. The point is to make giving up visible, not impossible.
 >
+> **How App Lock uses the AccessibilityService API** *(REQUIRED by policy — the listing must document the accessibility use; omitting this section got the app rejected on 2026-07-22)*
+> BeOffline's App Lock feature uses Android's AccessibilityService API for one purpose: to detect which app comes to the foreground, so it can show your block screen when you open an app you chose to lock during a focus session. It only receives window-change events. It does not read screen content, does not capture what you type, does not collect passwords, and never sends any accessibility data off your device. The app shows a full disclosure before you enable the service, and you can turn it off at any time in Settings → Accessibility.
+>
 > **Your privacy**
-> Your block rules stay on your phone. BeOffline never reads your screen or what you type. It only detects which app is in the foreground so it can show your block screen. See our privacy policy for details.
+> Your block rules stay on your phone. See our privacy policy for details.
 >
 > BeOffline is a self-control tool for your own device. It is not a parental-control or monitoring app.
 

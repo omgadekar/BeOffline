@@ -41,7 +41,7 @@ public sealed class TamperController(AppDbContext db, INotificationService notif
         });
         await db.SaveChangesAsync();
 
-        var name = (await db.Users.FindAsync(uid))?.DisplayName ?? "Your partner";
+        var name = Names.First((await db.Users.FindAsync(uid))?.DisplayName);
         var partnerUids = await db.Pairings
             .Where(p => p.Status == PairingStatus.Active && (p.UserAUid == uid || p.UserBUid == uid))
             .Select(p => p.UserAUid == uid ? p.UserBUid : p.UserAUid)
