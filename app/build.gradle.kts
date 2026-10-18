@@ -15,8 +15,12 @@ android {
         applicationId = "com.beoffline.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.0.8"
+        // A minor bump, not a patch: the whole front end changed shape — two
+        // tabs instead of five, one block object instead of two rule types,
+        // and a light theme. Play only cares that versionCode goes up, but
+        // the name is what a user sees next to "What's new".
+        versionCode = 10
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
