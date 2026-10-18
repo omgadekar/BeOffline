@@ -82,7 +82,9 @@ public sealed class RequestsController(AppDbContext db, INotificationService not
         db.UnlockRequests.Add(unlockRequest);
         await db.SaveChangesAsync();
 
-        var requesterName = (await db.Users.FindAsync(uid))?.DisplayName ?? "Your partner";
+        // First name only: this string is both the notification title and the
+        // name the requester is shown by in the approver's list.
+        var requesterName = Names.First((await db.Users.FindAsync(uid))?.DisplayName);
         var dto = UnlockRequestDto.From(unlockRequest, requesterName, groupName);
         foreach (var approverUid in approverUids)
         {
@@ -203,7 +205,7 @@ public sealed class RequestsController(AppDbContext db, INotificationService not
         }
         await db.SaveChangesAsync();
 
-        var approverName = (await db.Users.FindAsync(uid))?.DisplayName ?? "Your partner";
+        var approverName = Names.First((await db.Users.FindAsync(uid))?.DisplayName);
         var dto = UnlockRequestDto.From(request, resolvedByName: approverName);
         await notifier.NotifyAsync(
             request.RequesterUid,

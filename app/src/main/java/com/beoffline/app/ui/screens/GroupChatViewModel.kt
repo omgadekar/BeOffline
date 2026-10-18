@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.data.model.ChatMessageCache
+import com.beoffline.app.util.disambiguatedFirstNames
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,13 +33,17 @@ class GroupChatViewModel @Inject constructor(
     private val _memberCount = MutableStateFlow(0)
     val memberCount: StateFlow<Int> = _memberCount.asStateFlow()
 
-    /** Mentionable members (everyone but me, with a display name) — for the @ picker. */
+    /** Mentionable members (everyone but me) — for the @ picker. */
     private val _members = MutableStateFlow<List<ChatMember>>(emptyList())
     val members: StateFlow<List<ChatMember>> = _members.asStateFlow()
 
     /** All member names (including mine) — for highlighting @tokens in bubbles. */
     private val _mentionNames = MutableStateFlow<List<String>>(emptyList())
     val mentionNames: StateFlow<List<String>> = _mentionNames.asStateFlow()
+
+    /** uid → the name to show in chat: first name, or "Priya S." if two share one. */
+    private val _chatNames = MutableStateFlow<Map<String, String>>(emptyMap())
+    val chatNames: StateFlow<Map<String, String>> = _chatNames.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -47,10 +52,19 @@ class GroupChatViewModel @Inject constructor(
                     val members = repository.membersOf(group)
                     _groupName.value = group.name
                     _memberCount.value = members.size
-                    _members.value = members
-                        .filter { it.uid != myUid && !it.displayName.isNullOrBlank() }
-                        .map { ChatMember(it.uid, it.displayName!!) }
-                    _mentionNames.value = members.mapNotNull { it.displayName?.takeIf(String::isNotBlank) }
+
+                    // Chat names people by first name — you know who these people
+                    // are. Two Priyas keep a surname initial so a mention still
+                    // lands on exactly one person.
+                    val named = members.filter { !it.displayName.isNullOrBlank() }
+                    val shortNames = disambiguatedFirstNames(named.map { it.displayName!! })
+                    val byUid = named.associate { it.uid to (shortNames[it.displayName] ?: it.displayName!!) }
+
+                    _chatNames.value = byUid
+                    _members.value = named
+                        .filter { it.uid != myUid }
+                        .mapNotNull { member -> byUid[member.uid]?.let { ChatMember(member.uid, it) } }
+                    _mentionNames.value = byUid.values.toList()
                 }
             }
         }

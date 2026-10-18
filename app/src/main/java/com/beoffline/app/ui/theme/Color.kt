@@ -2,27 +2,100 @@ package com.beoffline.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Brand Palette ─────────────────────────────────────────────────────────────
-val Brand900 = Color(0xFF0D0F1A)   // Deep space - darkest background
-val Brand800 = Color(0xFF13172A)   // Card backgrounds
-val Brand700 = Color(0xFF1C2240)   // Elevated surfaces
-val Brand600 = Color(0xFF252B50)   // Border / divider
+// Paper palette.
+//
+// Light-first, warm, one accent. The token NAMES are carried over from the old
+// Nocturne palette on purpose: every screen picks the new ground up at once
+// without a rename sweep. Only the values changed.
+//
+// Nocturne was retired because it read cold and generic, and because its
+// dimmest text (0xFF75798C on 0xFF161826) measured 4.08:1 against the WCAG AA
+// floor of 4.5:1 for body text. Every value below clears AA on the surface it
+// actually sits on; ratios are noted where they matter.
 
-// Accent: Electric Indigo-Blue gradient
-val AccentPrimary   = Color(0xFF6366F1)  // Indigo 500
-val AccentSecondary = Color(0xFF818CF8)  // Indigo 400
-val AccentGlow      = Color(0xFF4F52C9)  // Pressed state
+/** Screen ground. Warm paper, never pure white. */
+val Brand900 = Color(0xFFF7F3ED)
 
-// Status
-val StatusActive   = Color(0xFF34D399)   // Emerald green — VPN running
-val StatusInactive = Color(0xFF6B7280)   // Cool grey — idle
-val StatusDanger   = Color(0xFFF87171)   // Red — warning/error
+/** Cards and rows sitting on the ground. Outlined, not elevated. */
+val Brand800 = Color(0xFFFFFFFF)
 
-// Text
-val TextPrimary   = Color(0xFFF1F5F9)
-val TextSecondary = Color(0xFF94A3B8)
-val TextDisabled  = Color(0xFF475569)
+/** Sunken: segmented tracks, pressed states, inert tiles. */
+val Brand700 = Color(0xFFEFE9E0)
 
-// Gradient stops used in backgrounds / cards
-val GradientStart = Color(0xFF6366F1)
-val GradientEnd   = Color(0xFF8B5CF6)
+/** Hairlines and outlines that read as structure, not decoration. */
+val Brand600 = Color(0xFFE6DED2)
+
+/** A line that needs more presence: dashed "add" borders, strong dividers. */
+val Brand500 = Color(0xFFD7CBBA)
+
+/**
+ * The block overlay and challenge surface. A different surface from the app,
+ * still light: a black screen at the moment someone is already frustrated was
+ * tried and deliberately rejected.
+ */
+val BrandVoid = Color(0xFFF2ECE2)
+
+// Accent: clay. One accent, no second. Warm enough to feel human, dark enough
+// to carry white text.
+
+/** Fills (white on it = 5.9:1) and accent text on the ground (5.4:1). */
+val AccentPrimary = Color(0xFFA8452A)
+
+/** A lighter clay for the rare second step. */
+val AccentSecondary = Color(0xFFC25B3A)
+
+/** Accent-tinted outline: quieter than AccentPrimary, still clearly ours. */
+val AccentGlow = Color(0xFFE3C3B5)
+
+/** Text and icons sitting on an accent wash (7.4:1 on AccentSurface). */
+val AccentBright = Color(0xFF7E3220)
+
+/** Filled accent surface: selected rows, own chat bubbles. */
+val AccentSurface = Color(0xFFF6E7E0)
+
+/** Dimmer accent surface: avatars, group tiles. */
+val AccentSurfaceDim = Color(0xFFFAF0EB)
+
+/** Text that sits on a filled AccentPrimary surface. */
+val OnAccent = Color(0xFFFFFFFF)
+
+// Status. "Active" is simply the accent. There is no destructive red: ending a
+// block early, or dropping a partner, is written in TextSecondary. Possible,
+// never inviting. That is a product decision, not an oversight.
+
+val StatusActive = AccentPrimary
+val StatusInactive = Color(0xFF8C8276)
+
+/**
+ * Borrowed time: an app open on an allowance someone granted. Differs from clay
+ * in lightness as well as hue, so the two live states stay apart without
+ * relying on colour vision. 5.4:1 on the ground.
+ */
+val StatusDanger = Color(0xFF8A5A12)
+val StatusDangerSurface = Color(0xFFF6EDDC)
+val StatusDangerOutline = Color(0xFFDCC28C)
+
+// Text ramp, darkest to faintest.
+
+/** 15.2:1 on the ground. */
+val TextPrimary = Color(0xFF1C1915)
+
+/** 10.6:1. Body copy that should still carry weight. */
+val TextMuted = Color(0xFF3A332C)
+
+/** 5.3:1, the floor for anything a person has to read. */
+val TextSecondary = Color(0xFF6B635A)
+
+/**
+ * Kept as an alias of [TextSecondary]. In Nocturne this was a separate, and
+ * failing, third step; collapsing it fixes every call site at once. Do not give
+ * it a dimmer value again.
+ */
+val TextTertiary = TextSecondary
+
+/** 3.4:1. Icon strokes and genuinely disabled controls only, never text. */
+val TextDisabled = Color(0xFF8C8276)
+
+// Gradient stops kept for the few surfaces that still wash a background.
+val GradientStart = Color(0xFFF6E7E0)
+val GradientEnd = Color(0xFFF7F3ED)

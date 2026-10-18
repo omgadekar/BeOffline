@@ -65,6 +65,17 @@ interface ApiService {
     @GET("api/requests")
     suspend fun listRequests(@Query("role") role: String): List<UnlockRequestDto>
 
+    // ── Unlock challenges ─────────────────────────────────────────────────────
+    /** Authoritative escalation level for one rule's current focus session. */
+    @GET("api/challenges/level")
+    suspend fun challengeLevel(
+        @Query("ruleKey") ruleKey: String,
+        @Query("sessionKey") sessionKey: String
+    ): ChallengeLevelDto
+
+    @POST("api/challenges/unlocks")
+    suspend fun recordSoloUnlock(@Body body: SoloUnlockBody): ChallengeLevelDto
+
     // ── Account ───────────────────────────────────────────────────────────────
     @DELETE("api/account")
     suspend fun deleteAccount()
@@ -106,8 +117,32 @@ data class TamperBody(
     val occurredAtUtc: String
 )
 
+/**
+ * One solved solo challenge. [clientEventId] makes the outbox retry safe —
+ * the server folds a repeat into the existing row rather than counting it
+ * twice, which would ratchet the ladder on a flaky connection.
+ */
+data class SoloUnlockBody(
+    val clientEventId: String,
+    val ruleKey: String,
+    val sessionKey: String,
+    val level: Int,
+    val kind: String,
+    val packageName: String,
+    val appLabel: String,
+    val grantedMinutes: Int,
+    val occurredAtUtc: String
+)
+
 // ── Responses ────────────────────────────────────────────────────────────────
 data class InviteResponseDto(val code: String, val expiresAtUtc: String)
+
+data class ChallengeLevelDto(
+    val ruleKey: String,
+    val sessionKey: String,
+    /** Unlocks the server has seen for this session — the ladder's floor. */
+    val level: Int
+)
 
 data class PairingDto(
     val id: String,

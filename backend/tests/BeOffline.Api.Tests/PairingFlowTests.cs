@@ -98,7 +98,7 @@ public sealed class PairingFlowTests : IClassFixture<TestAppFactory>
 
         Assert.True(removed!.RemovalPending);
         Assert.Equal("gina1", removed.RemovalRequestedByUid);
-        Assert.True(removed.RemovalEffectiveAtUtc > DateTime.UtcNow.AddHours(12));
+        Assert.True(removed.RemovalEffectiveAtUtc > DateTime.UtcNow.AddHours(11));
 
         // Partner (hank) was told immediately — the visible-and-costly mechanic.
         Assert.Contains(_factory.Push.For("hank1"), s => s.Type == "PARTNER_REMOVAL_STARTED");

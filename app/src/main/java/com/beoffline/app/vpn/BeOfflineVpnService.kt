@@ -50,6 +50,31 @@ class BeOfflineVpnService : VpnService() {
         const val VPN_ROUTE = "0.0.0.0"      // Route all IPv4 traffic through the tunnel
         const val VPN_ROUTE_PREFIX = 0        // /0 = all traffic
 
+        /**
+         * The IPv6 half of the tunnel.
+         *
+         * Without these, only IPv4 was claimed, and a blocked app's IPv6 traffic
+         * went straight out of the real interface — so apps on dual-stack
+         * networks (every major carrier, and most home broadband) carried on
+         * loading while the UI said they were offline. Instagram and the rest
+         * of Meta are IPv6-first, which is why they were the obvious symptom.
+         *
+         * A unique-local address: it exists only inside the tunnel and is never
+         * routable anywhere.
+         */
+        const val VPN_IPV6 = "fd00:beef:0:0:0:0:0:1"
+        const val VPN_IPV6_PREFIX = 128
+        const val VPN_ROUTE_V6 = "::"
+        const val VPN_ROUTE_V6_PREFIX = 0
+
+        /**
+         * DNS inside the tunnel, so name lookups from a blocked app are dropped
+         * with everything else. This used to be 8.8.8.8, which both leaked the
+         * fact of each lookup to Google and was pointless, since the tunnel
+         * discards the query anyway.
+         */
+        const val VPN_DNS = "10.0.0.1"
+
         // Intent actions to control the service
         const val ACTION_START = "com.beoffline.vpn.START"
         const val ACTION_STOP  = "com.beoffline.vpn.STOP"
@@ -114,7 +139,38 @@ class BeOfflineVpnService : VpnService() {
                 }
                 START_NOT_STICKY
             }
-            else -> START_NOT_STICKY
+            // Android restarting a START_STICKY service hands us a null intent.
+            // This branch used to do nothing at all, so after an OS kill the
+            // service came back alive with no tunnel — the notification was
+            // gone, the UI still said the rules were active, and every blocked
+            // app had working internet. Rebuild from the database instead.
+            else -> {
+                stopRequested = false
+                startForeground(NOTIFICATION_ID, buildNotification(blockedPackages.size))
+                serviceScope.launch {
+                    val packages = runCatching { repository.getActiveBlockedPackages() }
+                        .onFailure { Log.e(TAG, "Could not reload blocked packages.", it) }
+                        .getOrDefault(emptyList())
+
+                    if (packages.isEmpty()) {
+                        Log.d(TAG, "Restarted with no active rules; standing down.")
+                        withContext(Dispatchers.Main) {
+                            stopVpn()
+                            stopSelf()
+                        }
+                        return@launch
+                    }
+
+                    Log.i(TAG, "Restarted by the system; re-blocking ${packages.size} apps.")
+                    blockedPackages = packages
+                    blockedTrafficAlertManager.markSessionStarted()
+                    withContext(Dispatchers.Main) {
+                        startForeground(NOTIFICATION_ID, buildNotification(packages.size))
+                    }
+                    startVpnTunnel()
+                }
+                START_STICKY
+            }
         }
     }
 
@@ -160,21 +216,58 @@ class BeOfflineVpnService : VpnService() {
      * selected apps' packets enter our tun0 interface.
      */
     private fun startVpnTunnel() {
+        // An empty allow-list means "allow nothing specific", which Android
+        // reads as "tunnel EVERY app" — the whole phone would go offline. The
+        // callers guard against this, but the consequence is severe enough to
+        // check again here.
+        if (blockedPackages.isEmpty()) {
+            Log.w(TAG, "No packages to block; refusing to establish a catch-all tunnel.")
+            stopVpn()
+            stopSelf()
+            return
+        }
+
+        // Re-establishing (a rule changed while the tunnel was up) must tear the
+        // old one down first. Previously the fd and the packet loop were simply
+        // overwritten, leaving an orphaned loop reading a stale descriptor.
+        teardownTunnel()
+
         try {
             val builder = Builder()
                 .setSession("BeOffline")
                 .addAddress(VPN_IP, 32)
-                .addDnsServer("8.8.8.8")
-                .addRoute(VPN_ROUTE, VPN_ROUTE_PREFIX) // Catch-all route
+                .addDnsServer(VPN_DNS)
+                .addRoute(VPN_ROUTE, VPN_ROUTE_PREFIX) // Catch-all route, IPv4
+
+            // IPv6, added separately: a device or ROM without IPv6 support can
+            // reject these, and that must not cost us the IPv4 block as well.
+            try {
+                builder.addAddress(VPN_IPV6, VPN_IPV6_PREFIX)
+                builder.addRoute(VPN_ROUTE_V6, VPN_ROUTE_V6_PREFIX)
+                Log.d(TAG, "IPv6 claimed by the tunnel.")
+            } catch (e: Exception) {
+                Log.w(TAG, "IPv6 unavailable on this device, IPv4 only: ${e.message}")
+            }
 
             // ── Add each blocked app to the tunnel (their traffic gets trapped) ──
+            var tunnelled = 0
             for (pkg in blockedPackages) {
                 try {
                     builder.addAllowedApplication(pkg)
+                    tunnelled++
                     Log.d(TAG, "Tunneling (blocking): $pkg")
                 } catch (e: Exception) {
                     Log.w(TAG, "Package not found, skipping: $pkg")
                 }
+            }
+
+            // Every package was uninstalled or unresolvable. Establishing now
+            // would again mean "tunnel everything".
+            if (tunnelled == 0) {
+                Log.w(TAG, "None of the blocked packages resolved; not establishing.")
+                stopVpn()
+                stopSelf()
+                return
             }
 
             // ── Build the virtual network interface ──
@@ -265,6 +358,16 @@ class BeOfflineVpnService : VpnService() {
 
     private fun stopVpn() {
         Log.d(TAG, "Stopping VPN and closing tunnel interface.")
+        teardownTunnel()
+        vpnStateManager.setRunning(false)
+        blockedTrafficAlertManager.markSessionStopped()
+    }
+
+    /**
+     * Closes the tunnel without touching the session state, so a rebuild does
+     * not briefly report itself as stopped.
+     */
+    private fun teardownTunnel() {
         vpnJob?.cancel()
         vpnJob = null
         try {
@@ -273,8 +376,6 @@ class BeOfflineVpnService : VpnService() {
             Log.w(TAG, "Error closing VPN interface: ${e.message}")
         }
         vpnInterface = null
-        vpnStateManager.setRunning(false)
-        blockedTrafficAlertManager.markSessionStopped()
     }
 
     private fun shouldScheduleRecovery(): Boolean {

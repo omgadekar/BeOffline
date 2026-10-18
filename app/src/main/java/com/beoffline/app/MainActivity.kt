@@ -2,18 +2,23 @@ package com.beoffline.app
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Color
 import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.accountability.RealtimeClient
 import com.beoffline.app.ui.navigation.BeOfflineNavGraph
 import com.beoffline.app.ui.theme.BeOfflineTheme
+import com.beoffline.app.ui.theme.Brand900
 import com.beoffline.app.vpn.VpnController
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,19 +55,46 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Draw behind the status and navigation bars: the app's ground should
+        // run to the physical edges of the screen, not stop at a black band.
+        // Every screen pads its own content off the bars via WindowInsets, and
+        // the bottom nav sits above the gesture/button bar rather than under it.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        )
         super.onCreate(savedInstanceState)
         navRoute.value = intent?.getStringExtra(AccountabilityRepository.EXTRA_NAV_ROUTE)
+
+        // A notification deep-link always wins: someone tapping "Priya approved
+        // it" should land on that, not on a welcome flow.
+        val prefs = getSharedPreferences(UI_PREFS, MODE_PRIVATE)
+        val startOnWelcome = navRoute.value == null && !prefs.getBoolean(KEY_WELCOME_DONE, false)
+        if (startOnWelcome) prefs.edit().putBoolean(KEY_WELCOME_DONE, true).apply()
+
         setContent {
             BeOfflineTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxSize().background(Brand900)) {
                     BeOfflineNavGraph(
                         onRequestVpn = ::requestVpnPermission,
+                        startOnWelcome = startOnWelcome,
                         navRoute = navRoute,
                         onNavRouteHandled = { navRoute.value = null }
                     )
                 }
             }
         }
+    }
+
+    private companion object {
+        const val UI_PREFS = "dashboard_ui"
+
+        /**
+         * Set the moment the welcome flow is SHOWN, not when it is completed:
+         * someone who skips it, or backs out, should not be met by it again on
+         * every launch. Everything it offers is reachable from the app itself.
+         */
+        const val KEY_WELCOME_DONE = "welcome_flow_seen"
     }
 
     // App already running: a tapped notification arrives here (singleTop).

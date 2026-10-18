@@ -152,7 +152,7 @@ public sealed class GroupsController(AppDbContext db, INotificationService notif
         }
         await db.SaveChangesAsync();
 
-        var joinerName = (await db.Users.FindAsync(uid))?.DisplayName ?? "A new member";
+        var joinerName = Names.First((await db.Users.FindAsync(uid))?.DisplayName, "A new member");
         foreach (var member in activeMembers.Where(m => m.Uid != uid))
         {
             await notifier.NotifyAsync(

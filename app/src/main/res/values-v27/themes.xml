@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- windowLightNavigationBar only exists from API 27; the base theme in
+         values/ covers 26. -->
+    <style name="Theme.BeOffline" parent="android:Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/bo_ground</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

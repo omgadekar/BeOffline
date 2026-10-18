@@ -129,3 +129,19 @@ public sealed record ReportTamperRequest(
     DateTime OccurredAtUtc);
 
 public sealed record TamperEventDto(string Type, string? PackageName, DateTime OccurredAtUtc, DateTime ReportedAtUtc);
+
+// ── Unlock challenges ────────────────────────────────────────────────────────
+
+public sealed record RecordSoloUnlockRequest(
+    string ClientEventId,
+    string RuleKey,
+    string SessionKey,
+    int Level,
+    string Kind,
+    string PackageName,
+    string AppLabel,
+    int GrantedMinutes,
+    DateTime OccurredAtUtc);
+
+/// <summary>How many unlocks the server has seen for one rule's focus session.</summary>
+public sealed record ChallengeLevelDto(string RuleKey, string SessionKey, int Level);

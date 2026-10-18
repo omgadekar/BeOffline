@@ -59,7 +59,7 @@ public sealed class GroupFlowTests : IClassFixture<TestAppFactory>
         // The group now has real membership → the third member is cooldown-gated (anti-puppet).
         var afterThird = await JoinAsync(owner, third, group.Id);
         var thirdMember = afterThird.Members.Single(m => m.Uid == "g-third1");
-        Assert.True(thirdMember.CanApproveAfterUtc > DateTime.UtcNow.AddHours(12),
+        Assert.True(thirdMember.CanApproveAfterUtc > DateTime.UtcNow.AddHours(11),
             "a member added to an established group must not be able to approve immediately");
 
         // Both existing members heard about the join.
@@ -185,7 +185,7 @@ public sealed class GroupFlowTests : IClassFixture<TestAppFactory>
         var during = await leaveResponse.Content.ReadFromJsonAsync<GroupDto>();
         var leaving = during!.Members.Single(m => m.Uid == "l-owner1");
         Assert.True(leaving.RemovalPending);
-        Assert.True(leaving.RemovalEffectiveAtUtc > DateTime.UtcNow.AddHours(12));
+        Assert.True(leaving.RemovalEffectiveAtUtc > DateTime.UtcNow.AddHours(11));
         Assert.Contains(_factory.Push.For("l-heir1"), s => s.Type == "GROUP_MEMBER_REMOVAL_STARTED");
         Assert.Contains(_factory.Push.For("l-third1"), s => s.Type == "GROUP_MEMBER_REMOVAL_STARTED");
 

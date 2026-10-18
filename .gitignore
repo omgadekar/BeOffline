@@ -10,3 +10,7 @@ local.properties
 .idea/libraries/
 .idea/modules.xml
 .idea/workspace.xml
+
+# Local scratch output (upscaled images, working files) - never shipped
+output/
+tmp/

@@ -215,6 +215,41 @@ public sealed class TamperEvent
 }
 
 /// <summary>
+/// One solved solo unlock challenge.
+///
+/// This table exists so the escalation ladder outlives the device. Difficulty
+/// climbing with every unlock inside a focus session is the whole point of the
+/// solo challenge, and holding that count only in local storage made "clear app
+/// data" a one-tap reset back to the easiest challenge. The client still keeps
+/// its own count and takes whichever is higher, so being offline never makes
+/// the next challenge easier than it already was.
+///
+/// Deliberately narrow: a rule key the server can't interpret, an opaque
+/// session key, the challenge kind, and the app being unlocked — enough to
+/// count and to tell a partner what happened, nothing more.
+/// </summary>
+public sealed class SoloUnlock
+{
+    public Guid Id { get; set; }
+    public required string Uid { get; set; }
+    /// <summary>Opaque per-account rule identity, e.g. "rule-4". Never parsed server-side.</summary>
+    public required string RuleKey { get; set; }
+    /// <summary>Identifies the focus session the ladder belongs to; a new session starts at zero.</summary>
+    public required string SessionKey { get; set; }
+    /// <summary>Which unlock this was within the session (1 = the first).</summary>
+    public int Level { get; set; }
+    /// <summary>Arithmetic | Retype | Pattern | Hold.</summary>
+    public required string Kind { get; set; }
+    public required string PackageName { get; set; }
+    public required string AppLabel { get; set; }
+    public int GrantedMinutes { get; set; }
+    /// <summary>Client idempotency key — the offline outbox must not double-count.</summary>
+    public required string ClientEventId { get; set; }
+    public DateTime OccurredAtUtc { get; set; }
+    public DateTime ReportedAtUtc { get; set; }
+}
+
+/// <summary>
 /// One row per handled HTTP request (operational logging). Deliberately stores
 /// metadata only — never request/response bodies, auth headers, or tokens — so
 /// the log itself introduces no new sensitive-data surface.

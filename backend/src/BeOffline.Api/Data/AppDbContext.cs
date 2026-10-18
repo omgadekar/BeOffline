@@ -17,6 +17,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<RequestApproval> RequestApprovals => Set<RequestApproval>();
     public DbSet<AllowanceRecord> Allowances => Set<AllowanceRecord>();
     public DbSet<TamperEvent> TamperEvents => Set<TamperEvent>();
+    public DbSet<SoloUnlock> SoloUnlocks => Set<SoloUnlock>();
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<ErrorLog> ErrorLogs => Set<ErrorLog>();
 
@@ -98,6 +99,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             e.HasIndex(x => new { x.Uid, x.ClientEventId }).IsUnique();
             e.HasIndex(x => x.Uid);
+        });
+
+        b.Entity<SoloUnlock>(e =>
+        {
+            e.HasIndex(x => new { x.Uid, x.ClientEventId }).IsUnique();
+            // The level lookup is the hot path: one account, one rule, one session.
+            e.HasIndex(x => new { x.Uid, x.RuleKey, x.SessionKey });
+            e.Property(x => x.Uid).HasMaxLength(128);
+            e.Property(x => x.RuleKey).HasMaxLength(64);
+            e.Property(x => x.SessionKey).HasMaxLength(64);
+            e.Property(x => x.Kind).HasMaxLength(24);
+            e.Property(x => x.PackageName).HasMaxLength(256);
+            e.Property(x => x.AppLabel).HasMaxLength(128);
+            e.Property(x => x.ClientEventId).HasMaxLength(160);
         });
 
         b.Entity<ActivityLog>(e =>
