@@ -111,7 +111,7 @@ fun BlockCreatorScreen(
                     onRequestBattery = viewModel::requestBattery,
                     onOpenNotificationSettings = viewModel::openNotificationSettings,
                     onRequestVpn = onRequestVpn,
-                    onOpenAccessibility = viewModel::openAccessibilitySettings,
+                    onShowAccessibilityDisclosure = onShowDisclosure,
                     onReady = {
                         showGate = false
                         viewModel.save(onNeedVpnPermission = onRequestVpn, onSaved = onBack)

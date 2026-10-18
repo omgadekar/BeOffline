@@ -206,7 +206,7 @@ fun WelcomeScreen(
                         onRequestBattery = viewModel::requestBattery,
                         onOpenNotificationSettings = viewModel::openNotificationSettings,
                         onRequestVpn = onRequestVpn,
-                        onOpenAccessibility = viewModel::openAccessibilitySettings,
+                        onShowAccessibilityDisclosure = onShowDisclosure,
                         onReady = ::saveAndFinish
                     )
                     // Someone who will not leave the app for the accessibility

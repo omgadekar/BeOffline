@@ -66,7 +66,7 @@ fun PermissionGate(
     onRequestBattery: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onRequestVpn: (List<String>) -> Unit,
-    onOpenAccessibility: () -> Unit,
+    onShowAccessibilityDisclosure: () -> Unit,
     onReady: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -99,7 +99,12 @@ fun PermissionGate(
             // system dialog and starts nothing, because there is nothing to
             // start until the block is saved.
             PermissionNeed.VpnConsent -> onRequestVpn(emptyList())
-            PermissionNeed.Accessibility -> onOpenAccessibility()
+            // NEVER opens Android's settings directly. Play's accessibility
+            // policy requires the prominent disclosure to be shown and
+            // acknowledged BEFORE the user is sent to enable the service, so
+            // this routes through the disclosure screen, whose own button is
+            // what finally opens settings.
+            PermissionNeed.Accessibility -> onShowAccessibilityDisclosure()
         }
     }
 
@@ -117,13 +122,33 @@ fun PermissionGate(
         )
         Spacer(Modifier.height(16.dp))
 
-        state.required.forEach { need ->
+        state.essential.forEach { need ->
             PermissionRow(
                 need = need,
                 granted = state.isGranted(need),
                 onAllow = { request(need) }
             )
             Spacer(Modifier.height(9.dp))
+        }
+
+        if (state.missingRecommended.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            BoEyebrow("Worth allowing too")
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "The block works without these. It just works less reliably, " +
+                    "and you cannot see that it is running.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Spacer(Modifier.height(10.dp))
+            state.recommended.forEach { need ->
+                PermissionRow(
+                    need = need,
+                    granted = state.isGranted(need),
+                    onAllow = { request(need) }
+                )
+                Spacer(Modifier.height(9.dp))
+            }
         }
 
         Spacer(Modifier.height(7.dp))
@@ -136,8 +161,8 @@ fun PermissionGate(
         if (!state.canStart) {
             Spacer(Modifier.height(9.dp))
             Text(
-                text = "Allow the rest and this turns on. Nothing is saved until then, " +
-                    "because a block without these would look active and do nothing.",
+                text = "Nothing is saved until the one above is allowed — without it this " +
+                    "block would look active and do nothing.",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = 4.dp)
             )

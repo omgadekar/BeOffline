@@ -57,6 +57,12 @@ data class BlockCreatorUiState(
     val notificationsOk: Boolean = false,
     val vpnConsentOk: Boolean = false,
     val isEditing: Boolean = false,
+    /**
+     * The strictness this block was loaded as, or null for a new one. Changing
+     * strictness moves the row between two tables, and without remembering
+     * where it came from the old row cannot be cleaned up.
+     */
+    val loadedAsLock: Boolean? = null,
     val isLoading: Boolean = false
 ) {
     val isLock: Boolean get() = strictness == Strictness.Locked
@@ -100,20 +106,23 @@ data class BlockCreatorUiState(
     val needsAccessibility: Boolean get() = isLock && !accessibilityOn
 
     /**
-     * What this block needs before it can do anything, given how strict it is.
-     *
-     * Battery and notifications are needed either way — Android will sleep the
-     * engine without the first, and the ongoing notice is the only way to see a
-     * block is running. The last one depends on the choice: an internet block
-     * needs VPN consent, a lock needs the accessibility switch. Someone who
-     * never wants a lock is never asked for accessibility.
+     * The one permission without which this block cannot work at all, decided
+     * by how strict it is: an internet block needs VPN consent, a lock needs
+     * the accessibility switch. Someone who never wants a lock is never asked
+     * for accessibility.
      */
-    val required: List<PermissionNeed>
-        get() = buildList {
-            add(PermissionNeed.Battery)
-            add(PermissionNeed.Notifications)
-            add(if (isLock) PermissionNeed.Accessibility else PermissionNeed.VpnConsent)
-        }
+    val essential: List<PermissionNeed>
+        get() = listOf(if (isLock) PermissionNeed.Accessibility else PermissionNeed.VpnConsent)
+
+    /**
+     * Worth having, but the block still enforces without them: the battery
+     * exemption keeps Android from sleeping the engine, and the notification is
+     * how you can see a block is running. Asking is right; **requiring** them
+     * is not. Refusing to create a block because someone declined a battery
+     * exemption is both heavy-handed and more than the app actually needs.
+     */
+    val recommended: List<PermissionNeed>
+        get() = listOf(PermissionNeed.Battery, PermissionNeed.Notifications)
 
     fun isGranted(need: PermissionNeed): Boolean = when (need) {
         PermissionNeed.Battery -> batteryOk
@@ -122,10 +131,12 @@ data class BlockCreatorUiState(
         PermissionNeed.Accessibility -> accessibilityOn
     }
 
-    val missing: List<PermissionNeed> get() = required.filterNot(::isGranted)
+    val missingEssential: List<PermissionNeed> get() = essential.filterNot(::isGranted)
+    val missingRecommended: List<PermissionNeed> get() = recommended.filterNot(::isGranted)
+    val missing: List<PermissionNeed> get() = missingEssential + missingRecommended
 
     /** Valid AND able to actually enforce. Saving before this is a lie. */
-    val canStart: Boolean get() = isValid && missing.isEmpty()
+    val canStart: Boolean get() = isValid && missingEssential.isEmpty()
 }
 
 /**
@@ -325,7 +336,8 @@ class BlockCreatorViewModel @Inject constructor(
                 isActive = isActive,
                 timerStartedAt = timerStartedAt,
                 createdAt = createdAt,
-                isEditing = true
+                isEditing = true,
+                loadedAsLock = strictness == Strictness.Locked
             )
         }
         val infos = resolveAppInfos(packages)
@@ -379,9 +391,34 @@ class BlockCreatorViewModel @Inject constructor(
             val timerStartedAt =
                 if (state.whenKind == WhenKind.Timer) System.currentTimeMillis() else null
 
+            // Changing strictness on an existing block moves it between two
+            // tables. Writing the new row under the OLD row's id would update
+            // whichever unrelated rule happens to hold that id in the other
+            // table, and leave the original behind still enforcing. So the old
+            // row is deleted and the new one inserted fresh.
+            val movedTable = state.loadedAsLock != null && state.loadedAsLock != state.isLock
+            if (movedTable) {
+                val oldId = state.id
+                if (oldId != null) {
+                    if (state.loadedAsLock == true) {
+                        openBlockRuleRepository.getRuleById(oldId)?.let {
+                            OpenBlockScheduler.cancelRule(context, oldId)
+                            openBlockRuleRepository.deleteRule(it)
+                        }
+                    } else {
+                        blockRuleRepository.getRuleById(oldId)?.let {
+                            RuleScheduler.cancelRule(context, oldId)
+                            blockRuleRepository.deleteRule(it)
+                        }
+                        syncTunnelToRemainingRules()
+                    }
+                }
+            }
+            val writeId = if (movedTable) null else state.id
+
             if (state.isLock) {
                 val rule = OpenBlockRule(
-                    id = state.id ?: 0,
+                    id = writeId ?: 0,
                     name = name,
                     blockedPackages = state.selectedPackages,
                     ruleType = state.whenKind.ruleType,
@@ -396,7 +433,7 @@ class BlockCreatorViewModel @Inject constructor(
                     disableEffectiveAt = null,
                     createdAt = state.createdAt
                 )
-                val saved = if (state.id != null) {
+                val saved = if (writeId != null) {
                     openBlockRuleRepository.updateRule(rule); rule
                 } else {
                     rule.copy(id = openBlockRuleRepository.saveRule(rule).toInt())
@@ -409,7 +446,7 @@ class BlockCreatorViewModel @Inject constructor(
                 }
             } else {
                 val rule = BlockRule(
-                    id = state.id ?: 0,
+                    id = writeId ?: 0,
                     name = name,
                     blockedPackages = state.selectedPackages,
                     ruleType = state.whenKind.ruleType,
@@ -423,7 +460,7 @@ class BlockCreatorViewModel @Inject constructor(
                     timerStartedAt = timerStartedAt,
                     createdAt = state.createdAt
                 )
-                val saved = if (state.id != null) {
+                val saved = if (writeId != null) {
                     blockRuleRepository.updateRule(rule); rule
                 } else {
                     rule.copy(id = blockRuleRepository.saveRule(rule).toInt())
@@ -460,8 +497,30 @@ class BlockCreatorViewModel @Inject constructor(
                     RuleScheduler.cancelRule(context, id)
                     blockRuleRepository.deleteRule(rule)
                 }
+                // Deleting the row is not enough: the tunnel was built from the
+                // old package list and keeps running until it is told otherwise,
+                // so the deleted app stayed offline and the "1 app offline"
+                // notification stayed up with it.
+                syncTunnelToRemainingRules()
             }
             onDeleted()
+        }
+    }
+
+    /**
+     * Rebuilds the VPN from whatever internet blocks are still active, or stops
+     * it when none are. The open-block engine needs no equivalent — it reads the
+     * rules table on every foreground event, so a deleted row stops mattering
+     * immediately.
+     */
+    private suspend fun syncTunnelToRemainingRules() {
+        val stillBlocked = blockRuleRepository.getActiveRulesOnce()
+            .flatMap { it.blockedPackages }
+            .distinct()
+        if (stillBlocked.isEmpty()) {
+            vpnController.stopVpn()
+        } else {
+            vpnController.startVpn(stillBlocked)
         }
     }
 

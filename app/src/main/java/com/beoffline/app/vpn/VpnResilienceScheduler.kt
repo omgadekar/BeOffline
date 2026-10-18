@@ -86,6 +86,14 @@ class VpnHealthWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val activePackages = repository.getActiveBlockedPackages()
         if (activePackages.isEmpty()) {
+            // Stop a tunnel that has outlived its rules. This worker used to
+            // only ever start the VPN, so anything that left it running with
+            // nothing to block left it running for good: the notification sat
+            // there claiming apps were offline, and the tunnel went on
+            // swallowing their traffic. Whatever leaks it, this reaps it.
+            if (vpnStateManager.isRunning.value) {
+                vpnController.stopVpn()
+            }
             VpnResilienceScheduler.cancelHealthMonitor(applicationContext)
             return Result.success()
         }
