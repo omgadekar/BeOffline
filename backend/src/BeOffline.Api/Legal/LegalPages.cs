@@ -33,7 +33,7 @@ public static class LegalPages
 
     public static string PrivacyPolicy => Shell("Privacy Policy", $"""
         <h1>BeOffline — Privacy Policy</h1>
-        <p class="muted">Last updated: 2026-07-21 · Developer: OmGLabs · Contact: <a href="mailto:{ContactEmail}">{ContactEmail}</a></p>
+        <p class="muted">Last updated: 2026-10-18 · Developer: OmGLabs · Contact: <a href="mailto:{ContactEmail}">{ContactEmail}</a></p>
 
         <h2>What BeOffline does</h2>
         <p>BeOffline is a digital-wellbeing app that helps you block apps' internet access and stop
@@ -51,7 +51,12 @@ public static class LegalPages
           disabled, or the app is uninstalled, we notify the partner(s) you added — the core
           accountability feature, disclosed in-app.</li>
           <li><strong>Device token:</strong> a push-notification token to deliver approvals and alerts.</li>
-          <li><strong>Diagnostics:</strong> anonymous crash reports (Firebase Crashlytics).</li>
+          <li><strong>Diagnostics:</strong> anonymous crash reports, and the text you type
+          into "Report an issue", processed on our behalf by <strong>Google LLC</strong>
+          (Firebase Crashlytics) together with your device model and Android version. This
+          is on by default and you can turn it off at any time in
+          <strong>Settings → Crash reports</strong>; with it off, nothing is sent to
+          Crashlytics, including issue reports.</li>
         </ul>
 
         <h2>What we do NOT collect</h2>

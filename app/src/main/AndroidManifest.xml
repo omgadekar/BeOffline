@@ -49,6 +49,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BeOffline">
 
+        <!-- Crash reporting. Declared explicitly rather than left to the
+             library default, so the shipped state is readable here: on, and
+             disclosed on the privacy page. The runtime switch in Settings
+             (CrashReportingManager) overrides this and persists, so someone who
+             turns it off stays off across launches. -->
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            android:value="true" />
+
         <!-- ================================================================
              MAIN ACTIVITY
              ================================================================ -->

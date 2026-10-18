@@ -81,6 +81,21 @@ public sealed record ChatMessageDto(
         m.SentAtUtc);
 }
 
+/// <summary>
+/// Reporting a chat message. [Reason] is one of the fixed codes in
+/// ChatController.ReportReasons — a code, never free text, so reporting can't
+/// become a second channel for user-written content.
+/// </summary>
+public sealed record ReportChatMessageRequest(string Reason);
+
+public sealed record ChatMessageReportDto(
+    Guid MessageId,
+    string SenderUid,
+    string Reason,
+    DateTime ReportedAtUtc,
+    // True when this reporter had already reported this message.
+    bool AlreadyReported);
+
 // ── Unlock requests ──────────────────────────────────────────────────────────
 
 public sealed record CreateUnlockRequest(

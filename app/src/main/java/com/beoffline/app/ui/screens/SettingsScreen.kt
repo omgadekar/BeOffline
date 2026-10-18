@@ -277,6 +277,33 @@ fun SettingsScreen(
                 }
             }
 
+            item(key = "crash-reports") {
+                BoCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Crash reports",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = TextPrimary
+                            )
+                            Text(
+                                "Sends crash details and your device model to Google (Firebase " +
+                                    "Crashlytics) so a block that stops working can be fixed. " +
+                                    "Turning this off also stops \"Report an issue\" sending anything.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextTertiary,
+                                modifier = Modifier.padding(top = 3.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        BoToggle(
+                            checked = dashboard.crashReportingEnabled,
+                            onCheckedChange = dashboardViewModel::setCrashReportingEnabled
+                        )
+                    }
+                }
+            }
+
             item(key = "reward") {
                 BoCard(modifier = Modifier.fillMaxWidth()) {
                     Text("How long you get", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
@@ -425,10 +452,32 @@ fun SettingsScreen(
 
     if (showIssueDialog) {
         ReportIssueSheet(
+            crashReportingEnabled = dashboard.crashReportingEnabled,
             onDismiss = { showIssueDialog = false },
             onSubmit = { title, details ->
                 dashboardViewModel.submitIssueReport(title, details)
                 showIssueDialog = false
+            }
+        )
+    }
+
+    if (dashboard.issueReportBlocked) {
+        AlertDialog(
+            containerColor = Brand800,
+            onDismissRequest = dashboardViewModel::dismissIssueReportBlocked,
+            title = { Text("Nothing was sent", color = TextPrimary) },
+            text = {
+                Text(
+                    "Crash reports are off, so the report stayed on your phone. Turn them on " +
+                        "above if you want this to reach us.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = dashboardViewModel::dismissIssueReportBlocked) {
+                    Text("Got it", color = AccentBright)
+                }
             }
         )
     }
@@ -559,7 +608,11 @@ private fun HowItWorksDialog(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun ReportIssueSheet(onDismiss: () -> Unit, onSubmit: (String, String) -> Unit) {
+private fun ReportIssueSheet(
+    crashReportingEnabled: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (String, String) -> Unit
+) {
     var title by remember { mutableStateOf("") }
     var details by remember { mutableStateOf("") }
 
@@ -587,7 +640,14 @@ private fun ReportIssueSheet(onDismiss: () -> Unit, onSubmit: (String, String) -
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    "Sends the report with how many blocks you have and whether they are running. No app names, no traffic.",
+                    if (crashReportingEnabled) {
+                        "What you write here goes to Google (Firebase Crashlytics) with your " +
+                            "device model, how many blocks you have and whether they are " +
+                            "running. No app names, no traffic."
+                    } else {
+                        "Crash reports are off, so this will not reach us. Turn them on in " +
+                            "Settings first."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )

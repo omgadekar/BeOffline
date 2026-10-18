@@ -17,10 +17,10 @@ decision only you can make, and one of those (the DMCA agent) is a filing, not a
 |---|---|---|---|
 | 1 | **COPPA** 16 CFR 312 — no age gate at signup | $53,000 per child | ⚠️ **Partial** — no age screen, but not directed to children |
 | 2 | **GDPR** — fonts loaded from a CDN leak EU visitor IPs | ~$110 | ✅ **Clear** — and one real leak closed today |
-| 3 | **CIPA § 631** — analytics/replay on by default = wiretapping | $5,000 per violation | ⚠️ **Partial** — no replay, but crash reporting is on by default |
+| 3 | **CIPA § 631** — analytics/replay on by default = wiretapping | $5,000 per violation | ✅ **Closed** — crash reporting now disclosed and switchable (see §3) |
 | 4 | **CAN-SPAM** — bulk email with no unsubscribe or postal address | ~$53,000 per email | ✅ **Not applicable** — the product sends no email |
 | 5 | **CA auto-renewal** B&P § 17603 — renewals become refundable gifts | all revenue | ✅ **Not applicable** — no billing of any kind |
-| 6 | **DMCA safe harbor** — user uploads with no designated agent | up to $150,000 per work | ❌ **Gap** — hosts user content, no agent, no reporting path |
+| 6 | **DMCA safe harbor** — user uploads with no designated agent | up to $150,000 per work | ⚠️ **Partial** — reporting + removal shipped; agent and takedown page still open |
 
 The two largest numbers in the video — COPPA and DMCA — are the two that are still open here.
 The small ones are closed or do not apply.
@@ -109,6 +109,28 @@ it is disclosed and reversible; default off is safer), wire it to
 `setCrashlyticsCollectionEnabled`, declare "Crash logs" and "Diagnostics" in the Data Safety
 form, and add a line to the privacy page naming Google as the processor.
 
+### Done, 2026-10-18 — default **on**, disclosed, one tap off
+
+Default on was chosen deliberately. A crash in the tunnel or the foreground watcher means a
+block silently stopped working, which is the one thing this app has to get right, and crash
+volume is how you find out. The audit's objection was never collection itself — it was
+collection that is *undisclosed* and *irreversible*. Both are now fixed:
+
+- `support/CrashReportingManager.kt` holds the choice (SharedPreferences, default on) and
+  pushes it into `setCrashlyticsCollectionEnabled` from `BeOfflineApp.onCreate`, before
+  anything can crash. Turning it off also calls `deleteUnsentReports()`, so what is already
+  queued on disk goes too.
+- `firebase_crashlytics_collection_enabled` is now declared `true` in the manifest, so the
+  shipped default is readable there instead of being a library default. The runtime switch
+  persists and overrides it.
+- **Settings → Crash reports** is the toggle, and it says what goes and to whom.
+- `IssueReporter.submitIssue` returns `false` without sending when the switch is off, and the
+  sheet says so before you type. That closes the free-text-to-Google path the audit flagged.
+- `Legal/LegalPages.cs` names **Google LLC** as the processor for crash logs and issue-report
+  text, and points at the switch. `docs/PLAY_COMPLIANCE.md` §4 marks Diagnostics optional.
+
+Still Console-side: answer the Data Safety form accordingly.
+
 ---
 
 ## 4. CAN-SPAM — ✅ not applicable
@@ -169,13 +191,40 @@ A reviewer who finds the chat and no report button can reject the release — an
 far more likely outcome than a copyright claim over a text message.
 
 **What I would do, in order:**
-- Add **report message** and **block/remove member** to the group chat UI, with the report
-  reaching you (an API endpoint writing to the existing `ActivityLog` is enough to start).
+- ~~Add **report message** and **block/remove member** to the group chat UI, with the report
+  reaching you (an API endpoint writing to the existing `ActivityLog` is enough to start).~~
+  **Done, 2026-10-18 — see below.**
 - Register the designated agent and publish the contact on the `/privacy` page.
 - Add a short acceptable-use paragraph to the legal pages saying what is not allowed and that
   you will remove it.
 - If you ever add image or GIF upload, revisit all of this — that is when the copyright
   exposure becomes real rather than theoretical.
+
+---
+
+### Point 3, done — 2026-10-18
+
+- `POST /api/chat/groups/{groupId}/messages/{messageId}/reports` takes one of seven fixed
+  reason codes (`spam`, `harassment`, `hate`, `sexual`, `violence`, `selfharm`, `other`) and
+  writes a single `ActivityLog` row with method `REPORT` and the subject in the path:
+  `/moderation/chat/{groupId}/messages/{messageId}?reason=…&sender=…`. Reporter comes from the
+  token, sender from the message row — neither can be spoofed by the caller. Idempotent per
+  (reporter, message), like the send path. **The reported text is not copied into the log**;
+  the `ChatMessages` row still holds it, so the log gains no new sensitive surface.
+- Those rows are **exempt from the 30-day log prune** in `SweepService` — a report has to
+  still be there when you act on it.
+- **Removal** was already there: `DELETE /api/groups/{id}/members/{uid}` is leave-or-remove,
+  owner-gated for other people, with the standard visible cooldown. It is now reachable from
+  the chat itself rather than only from the groups page.
+- App side: long-press a message → "Report this message" (and, for the owner, "Remove <name>
+  from the group"); the chat header menu has "Leave this group". Four tests in
+  `backend/tests/BeOffline.Api.Tests/ChatModerationTests.cs`.
+
+**Known limits.** A non-owner being harassed can report and leave, but cannot mute one person
+while staying in the group — and leaving runs the same 24h cooldown everything else does, so
+it is not instant. Both are consistent with how the rest of the product works, but a per-person
+mute is the obvious next step if a reviewer pushes back. Reading reports is still a database
+query; there is no moderation console.
 
 ---
 
@@ -185,12 +234,15 @@ Of the video's $261,110:
 
 - **$110 (fonts)** — closed, and a real DNS leak closed alongside it.
 - **$53,000 (CAN-SPAM)** and **the refund exposure (ARL)** — do not apply to this product.
-- **$5,000 (CIPA)** — mostly closed; what remains is a disclosure-and-toggle job on
-  Crashlytics, not a rearchitecture.
+- **$5,000 (CIPA)** — closed: Crashlytics is disclosed, declared in the manifest, and off in
+  one tap (§3).
 - **$53,000 (COPPA)** — a decision about whether to gate, plus making the Play Console answer
   match the privacy page.
-- **$150,000 (DMCA)** — the genuine gap, and the Play UGC requirement inside it is the thing
-  most likely to actually bite, at the next release review.
+- **$150,000 (DMCA)** — the Play UGC requirement inside it, the part most likely to actually
+  bite at the next release review, is now met: reporting and removal ship in the chat (§6).
+  The designated-agent filing and a published takedown address are still open, and they are
+  paperwork rather than code.
 
-Nothing here blocks a build. Items 3 and 6 should be done before the next Play submission;
-`docs/PLAY_COMPLIANCE.md` is the checklist that release goes through.
+Nothing here blocks a build. The code halves of items 3 and 6 landed on 2026-10-18; what is
+left is Console answers and the DMCA filing. `docs/PLAY_COMPLIANCE.md` is the checklist that
+release goes through.

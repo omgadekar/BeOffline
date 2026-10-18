@@ -211,6 +211,14 @@ class AccountabilityRepository @Inject constructor(
         OutboxWorker.enqueue(context)
     }
 
+    /**
+     * Reports a message to the server (Play's UGC requirement). Not queued
+     * through the outbox: reporting is a deliberate act someone just took, and
+     * a silent retry hours later would be worse than telling them it failed.
+     */
+    suspend fun reportChatMessage(groupId: String, messageId: String, reason: String): ChatMessageReportDto =
+        api.reportChatMessage(groupId, messageId, ReportChatMessageBody(reason))
+
     suspend fun refreshChat(groupId: String) {
         val dtos = api.listChatMessages(groupId)
         chatMessageDao.upsertAll(dtos.map { it.toEntity() })

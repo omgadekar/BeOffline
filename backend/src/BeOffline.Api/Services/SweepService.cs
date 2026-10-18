@@ -139,7 +139,12 @@ public sealed class SweepService(IServiceScopeFactory scopeFactory, IConfigurati
         var cutoff = now - TimeSpan.FromDays(config.GetValue("Logging:RetentionDays", 30));
         try
         {
-            await db.ActivityLogs.Where(l => l.TimestampUtc < cutoff).ExecuteDeleteAsync(ct);
+            // Moderation rows share this table but are not request logs: a
+            // report has to still be there when someone acts on it, so the
+            // retention window does not apply to them.
+            await db.ActivityLogs
+                .Where(l => l.TimestampUtc < cutoff && l.Method != ModerationLog.Method)
+                .ExecuteDeleteAsync(ct);
             await db.ErrorLogs.Where(l => l.TimestampUtc < cutoff).ExecuteDeleteAsync(ct);
             // Solo-unlock rows only matter for the focus session they belong to,
             // and a focus session is at most a day. Anything past the retention
