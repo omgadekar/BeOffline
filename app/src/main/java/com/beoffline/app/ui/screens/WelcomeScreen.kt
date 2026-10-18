@@ -88,9 +88,6 @@ fun WelcomeScreen(
     val suggestions by viewModel.suggestions.collectAsState()
     var step by remember { mutableStateOf(WelcomeStep.Pick) }
 
-    /** True once the user has been sent to Android's accessibility settings. */
-    var sentToSettings by remember { mutableStateOf(false) }
-
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // The ongoing notification is how a person knows a block is running at all,
@@ -133,11 +130,6 @@ fun WelcomeScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Came back from settings with the switch actually on: the block can hold,
-    // so save it and get out of the way.
-    LaunchedEffect(state.accessibilityOn, sentToSettings) {
-        if (sentToSettings && state.accessibilityOn) saveAndFinish()
-    }
 
     Column(
         modifier = Modifier
@@ -205,12 +197,54 @@ fun WelcomeScreen(
                     onPickStrictness = viewModel::setStrictness
                 )
 
-                WelcomeStep.Permission -> PermissionStep(onShowDisclosure = onShowDisclosure)
+                WelcomeStep.Permission -> {
+                    PermissionStep(onShowDisclosure = onShowDisclosure, isLock = state.isLock)
+                    Spacer(Modifier.height(22.dp))
+                    PermissionGate(
+                        state = state,
+                        onRefresh = viewModel::refreshPermissions,
+                        onRequestBattery = viewModel::requestBattery,
+                        onOpenNotificationSettings = viewModel::openNotificationSettings,
+                        onRequestVpn = onRequestVpn,
+                        onOpenAccessibility = viewModel::openAccessibilitySettings,
+                        onReady = ::saveAndFinish
+                    )
+                    // Someone who will not leave the app for the accessibility
+                    // switch should not be stuck here: the simpler block needs
+                    // nothing outside this screen.
+                    if (state.isLock) {
+                        Spacer(Modifier.height(18.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(BoShape.Control)
+                                .clickable(role = Role.Button) {
+                                    viewModel.setStrictness(Strictness.Offline)
+                                }
+                                .padding(vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Keep it empty instead",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = AccentPrimary
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "It still opens, but nothing loads. Nothing to set up outside here.",
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
             }
             Spacer(Modifier.height(28.dp))
         }
 
-        if (step != WelcomeStep.Pick) {
+        // The gate carries its own primary button, so the bottom bar belongs to
+        // the "when" step alone.
+        if (step == WelcomeStep.When) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -218,72 +252,25 @@ fun WelcomeScreen(
                     .padding(horizontal = 24.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (step == WelcomeStep.When) {
-                    Text(
-                        text = state.summary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    BoPrimaryButton(
-                        text = if (state.needsAccessibility) "Next" else "Start now",
-                        enabled = state.isValid,
-                        onClick = {
-                            if (state.needsAccessibility) {
-                                step = WelcomeStep.Permission
-                            } else {
-                                saveAndFinish()
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    // Deliberately does NOT save. Saving here and leaving meant
-                    // the block existed whether or not the switch was ever
-                    // flipped, so people landed on a list of blocks that were
-                    // quietly doing nothing. The save now happens on return,
-                    // and only once the switch is actually on.
-                    if (sentToSettings && !state.accessibilityOn) {
-                        Text(
-                            text = "Not switched on yet - nothing is blocked until it is.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = StatusDanger,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(10.dp))
-                    }
-                    BoPrimaryButton(
-                        text = if (sentToSettings) "Try again" else "Take me to the setting",
-                        onClick = {
-                            sentToSettings = true
-                            viewModel.openAccessibilitySettings()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(BoShape.Control)
-                            .clickable(role = Role.Button) {
-                                viewModel.setStrictness(Strictness.Offline)
-                                saveAndFinish()
-                            }
-                            .padding(vertical = 10.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Skip - keep it empty instead",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = AccentPrimary
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = "Still asks for one permission, but a simpler one",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
+                Text(
+                    text = state.summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(10.dp))
+                BoPrimaryButton(
+                    text = if (state.canStart) "Start now" else "Next",
+                    enabled = state.isValid,
+                    onClick = {
+                        if (state.canStart) {
+                            saveAndFinish()
+                        } else {
+                            viewModel.refreshPermissions()
+                            step = WelcomeStep.Permission
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -404,7 +391,7 @@ private fun WhenStep(
 }
 
 @Composable
-private fun PermissionStep(onShowDisclosure: () -> Unit) {
+private fun PermissionStep(onShowDisclosure: () -> Unit, isLock: Boolean) {
     Spacer(Modifier.height(18.dp))
     Text(
         text = "One permission,\nthen you are set",
@@ -412,8 +399,13 @@ private fun PermissionStep(onShowDisclosure: () -> Unit) {
     )
     Spacer(Modifier.height(13.dp))
     Text(
-        text = "To stop an app opening, Android has to tell BeOffline which app just " +
-            "came to the front. That switch lives in Android's own settings.",
+        text = if (isLock) {
+            "To stop an app opening, Android has to tell BeOffline which app just came " +
+                "to the front. That one switch lives in Android's own settings; the rest " +
+                "are right here."
+        } else {
+            "Nothing here leaves the app - each one is a system prompt over this screen."
+        },
         style = MaterialTheme.typography.bodyLarge,
         color = TextSecondary
     )

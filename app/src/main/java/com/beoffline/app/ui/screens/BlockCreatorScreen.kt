@@ -91,6 +91,41 @@ fun BlockCreatorScreen(
 
     var picking by remember { mutableStateOf<TimeField?>(null) }
     var confirmingDelete by remember { mutableStateOf(false) }
+    var showGate by remember { mutableStateOf(false) }
+
+
+    if (showGate) {
+        AlertDialog(
+            onDismissRequest = { showGate = false },
+            containerColor = Brand800,
+            title = {
+                Text(
+                    text = if (state.isLock) "Two things, then it's on" else "Three things, then it's on",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            text = {
+                PermissionGate(
+                    state = state,
+                    onRefresh = viewModel::refreshPermissions,
+                    onRequestBattery = viewModel::requestBattery,
+                    onOpenNotificationSettings = viewModel::openNotificationSettings,
+                    onRequestVpn = onRequestVpn,
+                    onOpenAccessibility = viewModel::openAccessibilitySettings,
+                    onReady = {
+                        showGate = false
+                        viewModel.save(onNeedVpnPermission = onRequestVpn, onSaved = onBack)
+                    }
+                )
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showGate = false }) {
+                    Text("Not now", color = TextSecondary)
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -170,12 +205,32 @@ fun BlockCreatorScreen(
                 onClick = { viewModel.setStrictness(Strictness.Locked) }
             )
 
-            if (state.needsAccessibility) {
+            if (state.missing.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
-                PermissionNote(
-                    onExplain = onShowDisclosure,
-                    onAllow = viewModel::openAccessibilitySettings
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(BoShape.Card)
+                        .background(Brand700)
+                        .clickable(role = Role.Button, onClick = onShowDisclosure)
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = if (state.isLock) {
+                            "This needs one switch in Android's settings. We'll ask when you save."
+                        } else {
+                            "This needs your permission to hold traffic. We'll ask when you save."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "What it sees",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = AccentPrimary
+                    )
+                }
             }
 
             Spacer(Modifier.height(26.dp))
@@ -269,7 +324,15 @@ fun BlockCreatorScreen(
             BoPrimaryButton(
                 text = if (state.isEditing) "Save changes" else "Start blocking",
                 enabled = state.isValid,
-                onClick = { viewModel.save(onNeedVpnPermission = onRequestVpn, onSaved = onBack) },
+                onClick = {
+                    // Nothing is written until the block can actually enforce.
+                    if (state.canStart) {
+                        viewModel.save(onNeedVpnPermission = onRequestVpn, onSaved = onBack)
+                    } else {
+                        viewModel.refreshPermissions()
+                        showGate = true
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             )
         }

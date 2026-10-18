@@ -12,6 +12,7 @@ import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.data.repository.OpenBlockRuleRepository
 import com.beoffline.app.scheduler.OpenBlockScheduler
 import com.beoffline.app.scheduler.RuleScheduler
+import com.beoffline.app.vpn.VpnController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,9 @@ data class BlockCreatorUiState(
     val createdAt: Long = System.currentTimeMillis(),
     /** True once the system switch behind "will not open" is actually on. */
     val accessibilityOn: Boolean = false,
+    val batteryOk: Boolean = false,
+    val notificationsOk: Boolean = false,
+    val vpnConsentOk: Boolean = false,
     val isEditing: Boolean = false,
     val isLoading: Boolean = false
 ) {
@@ -94,6 +98,67 @@ data class BlockCreatorUiState(
 
     /** Shown only when the chosen strictness needs a switch that is still off. */
     val needsAccessibility: Boolean get() = isLock && !accessibilityOn
+
+    /**
+     * What this block needs before it can do anything, given how strict it is.
+     *
+     * Battery and notifications are needed either way — Android will sleep the
+     * engine without the first, and the ongoing notice is the only way to see a
+     * block is running. The last one depends on the choice: an internet block
+     * needs VPN consent, a lock needs the accessibility switch. Someone who
+     * never wants a lock is never asked for accessibility.
+     */
+    val required: List<PermissionNeed>
+        get() = buildList {
+            add(PermissionNeed.Battery)
+            add(PermissionNeed.Notifications)
+            add(if (isLock) PermissionNeed.Accessibility else PermissionNeed.VpnConsent)
+        }
+
+    fun isGranted(need: PermissionNeed): Boolean = when (need) {
+        PermissionNeed.Battery -> batteryOk
+        PermissionNeed.Notifications -> notificationsOk
+        PermissionNeed.VpnConsent -> vpnConsentOk
+        PermissionNeed.Accessibility -> accessibilityOn
+    }
+
+    val missing: List<PermissionNeed> get() = required.filterNot(::isGranted)
+
+    /** Valid AND able to actually enforce. Saving before this is a lie. */
+    val canStart: Boolean get() = isValid && missing.isEmpty()
+}
+
+/**
+ * The switches a block needs. Three of the four are granted by a system dialog
+ * drawn over the app; only [Accessibility] forces a trip to Android's settings,
+ * which is why it is asked for last and only when it is genuinely needed.
+ */
+enum class PermissionNeed(
+    val title: String,
+    val why: String,
+    /** False when granting it means leaving the app. */
+    val inApp: Boolean
+) {
+    Battery(
+        title = "Keep running in the background",
+        why = "Android puts sleeping apps aside. Without this a block looks active and quietly stops.",
+        inApp = true
+    ),
+    Notifications(
+        title = "Show a quiet notice",
+        why = "The ongoing notice is how you can tell a block is actually running.",
+        inApp = true
+    ),
+    VpnConsent(
+        title = "Hold traffic for blocked apps",
+        why = "A local connection on your own phone. Nothing is read, and nothing leaves the device.",
+        inApp = true
+    ),
+    Accessibility(
+        title = "See which app is open",
+        why = "The only way to stop an app opening. It reads the name of the app in front, nothing else.",
+        inApp = false
+    )
 }
 
 internal fun spokenTimer(minutes: Int): String = when {
@@ -116,7 +181,8 @@ class BlockCreatorViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val blockRuleRepository: BlockRuleRepository,
     private val openBlockRuleRepository: OpenBlockRuleRepository,
-    private val backgroundProtectionManager: BackgroundProtectionManager
+    private val backgroundProtectionManager: BackgroundProtectionManager,
+    private val vpnController: VpnController
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BlockCreatorUiState())
@@ -151,12 +217,27 @@ class BlockCreatorViewModel @Inject constructor(
         }
     }
 
-    /** Call on resume: the accessibility switch lives outside the app. */
+    /**
+     * Call on resume and after any grant. Every one of these can change outside
+     * the app — a system dialog, Android's settings, or another VPN app taking
+     * the slot — so the only reliable answer is to look again.
+     */
     fun refreshPermissions() {
+        val status = backgroundProtectionManager.getStatus()
         _uiState.update {
-            it.copy(accessibilityOn = backgroundProtectionManager.isAccessibilityServiceEnabled())
+            it.copy(
+                accessibilityOn = status.accessibilityEnabled,
+                batteryOk = status.batteryOptimizationIgnored,
+                notificationsOk = status.notificationsEnabled,
+                vpnConsentOk = vpnController.getVpnPermissionIntent() == null
+            )
         }
     }
+
+    fun requestBattery() = backgroundProtectionManager.openBatteryOptimizationFlow()
+
+    /** Pre-33 there is no runtime prompt, so the settings page is the only route. */
+    fun openNotificationSettings() = backgroundProtectionManager.openNotificationSettings()
 
     fun load(ruleId: Int?, startAsLock: Boolean) {
         if (loaded) return
