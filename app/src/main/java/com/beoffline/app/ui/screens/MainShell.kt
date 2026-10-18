@@ -40,20 +40,22 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.beoffline.app.ui.theme.AccentBright
 import com.beoffline.app.ui.theme.AccentPrimary
+import com.beoffline.app.ui.theme.Brand600
 import com.beoffline.app.ui.theme.Brand900
 import com.beoffline.app.ui.theme.TextTertiary
 
 /**
- * The five places the app can be. App Lock and Social used to be buried inside
- * the dashboard; giving them a tab each is the one structural change the
- * redesign makes.
+ * The two places the app can be.
+ *
+ * It used to be five — Home, Rules, App Lock, Social, Settings — which asked
+ * every newcomer to work out the difference between "Rules" and "App Lock"
+ * before they could block anything. Both are now one list of apps, strictness
+ * is a per-app choice inside it, and Settings moved to the header where a
+ * thing you touch twice a year belongs.
  */
 enum class ShellTab(val label: String, val icon: ImageVector, val iconOn: ImageVector) {
-    Home("Home", Icons.Outlined.Home, Icons.Filled.Home),
-    Rules("Rules", Icons.Outlined.Tune, Icons.Filled.Tune),
-    AppLock("App Lock", Icons.Outlined.Lock, Icons.Filled.Lock),
-    Social("Social", Icons.Outlined.Groups, Icons.Filled.Groups),
-    Settings("Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
+    Apps("Your apps", Icons.Outlined.Lock, Icons.Filled.Lock),
+    People("People", Icons.Outlined.Groups, Icons.Filled.Groups)
 }
 
 @Composable
@@ -61,44 +63,25 @@ fun MainShell(
     selectedTab: ShellTab,
     onSelectTab: (ShellTab) -> Unit,
     onRequestVpn: (List<String>) -> Unit,
-    onCreateRule: () -> Unit,
-    onEditRule: (Int) -> Unit,
-    onCreateLock: () -> Unit,
-    onEditLock: (Int) -> Unit,
-    onShowDisclosure: () -> Unit,
+    onOpenApp: (AppRowUi) -> Unit,
+    onAddApp: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenChat: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize().background(Brand900)) {
         Box(modifier = Modifier.weight(1f)) {
             when (selectedTab) {
-                ShellTab.Home -> HomeScreen(
-                    onRequestVpn = onRequestVpn,
-                    onSeeAllRules = { onSelectTab(ShellTab.Rules) },
-                    onOpenAppLock = { onSelectTab(ShellTab.AppLock) },
-                    onCreateRule = onCreateRule
-                )
-                ShellTab.Rules -> RulesScreen(
-                    onCreateRule = onCreateRule,
-                    onEditRule = onEditRule,
+                ShellTab.Apps -> AppsScreen(
+                    onOpenApp = onOpenApp,
+                    onAddApp = onAddApp,
+                    onOpenSettings = onOpenSettings,
                     onRequestVpn = onRequestVpn
                 )
-                ShellTab.AppLock -> OpenBlockScreen(
-                    onCreateRule = onCreateLock,
-                    onEditRule = onEditLock,
-                    onShowDisclosure = onShowDisclosure,
-                    onOpenAccountability = { onSelectTab(ShellTab.Social) }
-                )
-                ShellTab.Social -> AccountabilityScreen(onOpenChat = onOpenChat)
-                ShellTab.Settings -> SettingsScreen(onRequestVpn = onRequestVpn)
+                ShellTab.People -> AccountabilityScreen(onOpenChat = onOpenChat)
             }
         }
         BoBottomNav(selected = selectedTab, onSelect = onSelectTab)
     }
-
-    // First launch: the permissions that decide whether a rule actually holds.
-    // Hosted here rather than on Home so it appears whichever tab you land on
-    // (a notification deep-link can open the app straight into Social).
-    StartupPermissionsDialog(onRequestVpn = onRequestVpn)
 }
 
 @Composable
@@ -108,7 +91,7 @@ private fun BoBottomNav(selected: ShellTab, onSelect: (ShellTab) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(Color.White.copy(alpha = 0.07f))
+                .background(Brand600)
         )
         Row(
             modifier = Modifier

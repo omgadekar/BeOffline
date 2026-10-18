@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,11 +24,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -84,6 +88,8 @@ import com.beoffline.app.ui.theme.TextTertiary
 @Composable
 fun SettingsScreen(
     onRequestVpn: (List<String>) -> Unit,
+    onBack: () -> Unit = {},
+    onShowDisclosure: () -> Unit = {},
     dashboardViewModel: DashboardViewModel = hiltViewModel(),
     lockViewModel: OpenBlockViewModel = hiltViewModel(),
     accountViewModel: AccountabilityViewModel = hiltViewModel()
@@ -117,14 +123,14 @@ fun SettingsScreen(
     val status = dashboard.backgroundProtection
     val permissions = listOf(
         PermissionRow(
-            title = "Battery optimisation",
-            sub = "Stops Android sleeping the rule engine",
+            title = "Battery",
+            sub = "Stops Android putting BeOffline to sleep",
             granted = status?.batteryOptimizationIgnored ?: false,
             onGrant = dashboardViewModel::openBatteryOptimizationSettings
         ),
         PermissionRow(
             title = "Notifications",
-            sub = "Ongoing status while rules enforce",
+            sub = "A quiet note while a block is on",
             granted = status?.notificationsEnabled ?: false,
             onGrant = {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -135,8 +141,8 @@ fun SettingsScreen(
             }
         ),
         PermissionRow(
-            title = "VPN access",
-            sub = "The local tunnel that blocks traffic",
+            title = "Holding traffic",
+            sub = "How an app is kept offline. Nothing leaves your phone.",
             granted = dashboard.isVpnPermissionGranted,
             onGrant = { onRequestVpn(emptyList()) }
         ),
@@ -155,10 +161,25 @@ fun SettingsScreen(
             .background(Brand900)
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
+        Box(
+            modifier = Modifier
+                .padding(start = 10.dp, top = 8.dp)
+                .size(44.dp)
+                .clip(CircleShape)
+                .clickable(role = Role.Button, onClick = onBack),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = "Back",
+                tint = TextPrimary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
         BoScreenHeader(
             title = "Settings",
             subtitle = when (outstanding) {
-                0 -> "All four permissions allowed"
+                0 -> "Everything it needs is allowed"
                 1 -> "One permission still needed"
                 else -> "$outstanding permissions still needed"
             }
@@ -172,9 +193,9 @@ fun SettingsScreen(
         ) {
             item(key = "reliability") {
                 BoCard(modifier = Modifier.fillMaxWidth()) {
-                    BoEyebrow("Reliability")
+                    BoEyebrow("Keeping blocks working")
                     Text(
-                        text = "Android sleeps background apps differently on every phone. These four keep rules enforcing.",
+                        text = "Android puts background apps to sleep differently on every phone. These are what keep your blocks working.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary,
                         modifier = Modifier.padding(top = 6.dp)
@@ -241,7 +262,7 @@ fun SettingsScreen(
                                 color = TextPrimary
                             )
                             Text(
-                                "A quiet notification when a blocked app tries to connect.",
+                                "A quiet note when a blocked app tries to reach the internet.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextTertiary,
                                 modifier = Modifier.padding(top = 3.dp)
@@ -258,9 +279,9 @@ fun SettingsScreen(
 
             item(key = "reward") {
                 BoCard(modifier = Modifier.fillMaxWidth()) {
-                    Text("Unlock reward", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                    Text("How long you get", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
                     Text(
-                        "How long a locked app stays usable after you pass its challenge. Each unlock in a session gets harder.",
+                        "How long a blocked app stays usable once you have earned your way in. Each time in a session gets harder.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary,
                         modifier = Modifier.padding(top = 3.dp)
@@ -281,9 +302,9 @@ fun SettingsScreen(
 
             item(key = "challenge-kinds") {
                 BoCard(modifier = Modifier.fillMaxWidth()) {
-                    Text("Challenge kinds", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                    Text("How you get back in", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
                     Text(
-                        "What a locked app can ask of you. Pick more than one and the app rotates between them — you can't rehearse your way out.",
+                        "What a blocked app can ask of you. Pick more than one and it rotates between them — you can't rehearse your way out.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary,
                         modifier = Modifier.padding(top = 3.dp)
@@ -349,6 +370,12 @@ fun SettingsScreen(
                         icon = Icons.Outlined.HelpOutline,
                         label = "How BeOffline works",
                         onClick = { showHowItWorks = true }
+                    )
+                    BoHairline()
+                    SettingsRow(
+                        icon = Icons.Outlined.Shield,
+                        label = "What BeOffline can see",
+                        onClick = onShowDisclosure
                     )
                     BoHairline()
                     SettingsRow(
@@ -560,7 +587,7 @@ private fun ReportIssueSheet(onDismiss: () -> Unit, onSubmit: (String, String) -
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    "Sends the report with your rule counts and VPN state — no app names, no traffic.",
+                    "Sends the report with how many blocks you have and whether they are running. No app names, no traffic.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )

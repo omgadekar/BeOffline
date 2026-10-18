@@ -76,7 +76,7 @@ fun BoCard(
     val base = modifier
         .clip(shape)
         .background(Brand800, shape)
-        .border(1.dp, if (accented) AccentSurface else Color.White.copy(alpha = 0.07f), shape)
+        .border(1.dp, if (accented) AccentGlow else Brand600, shape)
     Column(
         modifier = (if (onClick != null) base.clickable(role = Role.Button, onClick = onClick) else base)
             .padding(padding),
@@ -112,8 +112,8 @@ fun BoFadedDivider(modifier: Modifier = Modifier) {
             .background(
                 Brush.horizontalGradient(
                     0f to Color.Transparent,
-                    0.14f to Color.White.copy(alpha = 0.14f),
-                    0.86f to Color.White.copy(alpha = 0.14f),
+                    0.14f to Brand500,
+                    0.86f to Brand500,
                     1f to Color.Transparent
                 )
             )
@@ -127,7 +127,7 @@ fun BoHairline(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .height(1.dp)
-            .background(Color.White.copy(alpha = 0.07f))
+            .background(Brand600)
     )
 }
 
@@ -168,9 +168,13 @@ fun BoToggle(
 }
 
 /**
- * The app's primary action: an accent outline over a faint accent wash. There
- * is no solid-fill button in this design — a filled button would be the
- * loudest thing on any screen it appeared on.
+ * The app's primary action: a solid clay fill carrying white text.
+ *
+ * Under the old dark palette this was an outline over a faint wash, on the
+ * argument that a filled button would shout. On paper the opposite is true —
+ * an outlined button on a light ground reads as secondary, and the one thing
+ * a screen wants you to do should not be the quietest thing on it. There is
+ * still only ever one of these per screen.
  */
 @Composable
 fun BoPrimaryButton(
@@ -180,12 +184,11 @@ fun BoPrimaryButton(
     enabled: Boolean = true,
     icon: ImageVector? = null
 ) {
-    val tint = if (enabled) AccentBright else TextDisabled
+    val tint = if (enabled) OnAccent else TextDisabled
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (enabled) AccentPrimary.copy(alpha = 0.14f) else Color.Transparent)
-            .border(1.dp, if (enabled) AccentPrimary else Brand600, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (enabled) AccentPrimary else Brand700)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 15.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -316,7 +319,7 @@ fun BoEmptyState(
             .padding(horizontal = 20.dp, vertical = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(icon, contentDescription = null, tint = Brand600, modifier = Modifier.size(34.dp))
+        Icon(icon, contentDescription = null, tint = TextDisabled, modifier = Modifier.size(34.dp))
         Text(
             text = title,
             style = MaterialTheme.typography.bodyLarge,

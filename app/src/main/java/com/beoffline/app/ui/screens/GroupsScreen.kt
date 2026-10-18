@@ -108,7 +108,7 @@ fun GroupsScreen(
                     GroupSectionCard {
                         Text("Sign in first", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
                         Text(
-                            "Groups need an account — sign in on the Accountability Partner screen, then come back here.",
+                            "Groups need an account. Sign in on the People tab, then come back here.",
                             style = MaterialTheme.typography.bodySmall, color = TextSecondary
                         )
                     }
@@ -244,7 +244,7 @@ private fun CreateGroupCard(busy: Boolean, onCreate: (String) -> Unit) {
     GroupSectionCard {
         Text("Start a group", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
         Text(
-            "Up to 10 people. Anyone in the group can approve your unlock requests — the first response counts.",
+            "Up to 10 people. Anyone in the group can let you back in, and whoever answers first decides.",
             style = MaterialTheme.typography.bodySmall, color = TextSecondary
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

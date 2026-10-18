@@ -56,12 +56,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.beoffline.app.data.model.ChatMessageCache
 import com.beoffline.app.ui.screens.GroupChatViewModel.ChatMember
+import com.beoffline.app.ui.theme.AccentBright
 import com.beoffline.app.ui.theme.AccentPrimary
 import com.beoffline.app.ui.theme.AccentSecondary
 import com.beoffline.app.ui.theme.Brand600
 import com.beoffline.app.ui.theme.Brand700
 import com.beoffline.app.ui.theme.Brand800
 import com.beoffline.app.ui.theme.Brand900
+import com.beoffline.app.ui.theme.OnAccent
 import com.beoffline.app.ui.theme.TextDisabled
 import com.beoffline.app.ui.theme.TextPrimary
 import com.beoffline.app.ui.theme.TextSecondary
@@ -301,16 +303,16 @@ private fun Bubble(
                 fontWeight = FontWeight.SemiBold
             )
         }
-        val mentionColor = if (mine) Color(0xFFFFF3B0) else AccentPrimary
+        val mentionColor = if (mine) AccentBright else AccentPrimary
         Text(
             annotateMentions(message.body, mentionNames, mentionColor),
             style = MaterialTheme.typography.bodyMedium,
-            color = if (mine) Color.White else TextPrimary
+            color = TextPrimary
         )
         Text(
             if (message.pending) "sending…" else timeText(message.sentAtUtc),
             style = MaterialTheme.typography.labelSmall,
-            color = if (mine) Color.White.copy(alpha = 0.7f) else TextDisabled,
+            color = TextSecondary,
             modifier = Modifier.align(Alignment.End)
         )
     }
@@ -390,7 +392,7 @@ private fun ChatInputBar(value: TextFieldValue, onValueChange: (TextFieldValue) 
                 Icon(
                     Icons.AutoMirrored.Filled.Send,
                     contentDescription = "Send",
-                    tint = if (enabled) Color.White else TextDisabled
+                    tint = if (enabled) OnAccent else TextDisabled
                 )
             }
         }

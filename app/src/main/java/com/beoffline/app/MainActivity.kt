@@ -60,22 +60,41 @@ class MainActivity : ComponentActivity() {
         // Every screen pads its own content off the bars via WindowInsets, and
         // the bottom nav sits above the gesture/button bar rather than under it.
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         )
         super.onCreate(savedInstanceState)
         navRoute.value = intent?.getStringExtra(AccountabilityRepository.EXTRA_NAV_ROUTE)
+
+        // A notification deep-link always wins: someone tapping "Priya approved
+        // it" should land on that, not on a welcome flow.
+        val prefs = getSharedPreferences(UI_PREFS, MODE_PRIVATE)
+        val startOnWelcome = navRoute.value == null && !prefs.getBoolean(KEY_WELCOME_DONE, false)
+        if (startOnWelcome) prefs.edit().putBoolean(KEY_WELCOME_DONE, true).apply()
+
         setContent {
             BeOfflineTheme {
                 Box(modifier = Modifier.fillMaxSize().background(Brand900)) {
                     BeOfflineNavGraph(
                         onRequestVpn = ::requestVpnPermission,
+                        startOnWelcome = startOnWelcome,
                         navRoute = navRoute,
                         onNavRouteHandled = { navRoute.value = null }
                     )
                 }
             }
         }
+    }
+
+    private companion object {
+        const val UI_PREFS = "dashboard_ui"
+
+        /**
+         * Set the moment the welcome flow is SHOWN, not when it is completed:
+         * someone who skips it, or backs out, should not be met by it again on
+         * every launch. Everything it offers is reachable from the app itself.
+         */
+        const val KEY_WELCOME_DONE = "welcome_flow_seen"
     }
 
     // App already running: a tapped notification arrives here (singleTop).

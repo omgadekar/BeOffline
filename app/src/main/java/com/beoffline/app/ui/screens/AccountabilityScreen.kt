@@ -224,7 +224,7 @@ fun AccountabilityScreen(
 @Composable
 private fun BoScreenHeaderWithName(signedIn: Boolean, userName: String?) {
     Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 14.dp)) {
-        Text("Accountability", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
+        Text("People", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
         Text(
             text = if (signedIn) "Signed in as ${userName.firstName(fallback = "you")}" else "Not signed in",
             style = MaterialTheme.typography.bodyMedium,
@@ -253,7 +253,7 @@ private fun IncomingRequestCard(
         )
         request.groupName?.let { group ->
             Text(
-                "Via $group — first response counts.",
+                "Via $group - whoever answers first decides.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary,
                 modifier = Modifier.padding(top = 4.dp)
@@ -354,14 +354,14 @@ private fun PartnerCard(
         // to involve several people at once, use a Group instead.
         if (uiState.partners.isNotEmpty()) {
             Text(
-                text = "One partner at a time. Remove them to pair with someone else, or use a group for several people.",
+                text = "One person at a time. Remove them to choose someone else, or start a group for several.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextDisabled,
                 modifier = Modifier.padding(top = 12.dp)
             )
         } else {
             Text(
-                text = "No partner yet. Share an invite code, or enter the one they sent you.",
+                text = "Nobody yet. Share an invite code, or enter the one they sent you.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary,
                 modifier = Modifier.padding(top = 8.dp)
@@ -440,7 +440,7 @@ private fun GroupsCard(
 
         if (groups.isEmpty()) {
             Text(
-                text = "Ask several people at once — the first response counts. Groups get a chat too.",
+                text = "Ask several people at once. Whoever answers first decides. Groups get a chat too.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary,
                 modifier = Modifier.padding(top = 8.dp)

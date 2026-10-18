@@ -2,48 +2,100 @@ package com.beoffline.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Nocturne palette ──────────────────────────────────────────────────────────
-// The names are kept from the first BeOffline palette so every screen picks the
-// new ground up at once; the values are the ones the redesign is drawn against.
-// Nothing here is a fill-first accent — the accent is a line and a glow.
+// Paper palette.
+//
+// Light-first, warm, one accent. The token NAMES are carried over from the old
+// Nocturne palette on purpose: every screen picks the new ground up at once
+// without a rename sweep. Only the values changed.
+//
+// Nocturne was retired because it read cold and generic, and because its
+// dimmest text (0xFF75798C on 0xFF161826) measured 4.08:1 against the WCAG AA
+// floor of 4.5:1 for body text. Every value below clears AA on the surface it
+// actually sits on; ratios are noted where they matter.
 
-/** Screen ground. */
-val Brand900 = Color(0xFF161826)
-/** Cards and rows sitting on the ground. */
-val Brand800 = Color(0xFF232532)
-/** One step up from a card — pressed states, inert tiles. */
-val Brand700 = Color(0xFF292B31)
-/** Hairlines and outlines that should read as structure, not decoration. */
-val Brand600 = Color(0xFF3F424D)
+/** Screen ground. Warm paper, never pure white. */
+val Brand900 = Color(0xFFF7F3ED)
 
-/** Darker than the ground — the block overlay and challenge surface. */
-val BrandVoid = Color(0xFF0F1019)
+/** Cards and rows sitting on the ground. Outlined, not elevated. */
+val Brand800 = Color(0xFFFFFFFF)
 
-// Accent: a muted violet. Used as an outline, a glow, or 10–25% wash — rarely a fill.
-val AccentPrimary   = Color(0xFF9184D9)
-val AccentSecondary = Color(0xFFB5ABFC)
-/** Accent-tinted outline: quieter than AccentPrimary, still clearly "ours". */
-val AccentGlow      = Color(0xFF5D5294)
-/** Text and icons sitting on an accent wash. */
-val AccentBright    = Color(0xFFD2CEFD)
-/** Filled accent surface — own chat bubbles, the live-session card's outline. */
-val AccentSurface   = Color(0xFF423A6A)
-/** Dimmer accent surface — avatars, group tiles. */
-val AccentSurfaceDim = Color(0xFF2B2741)
+/** Sunken: segmented tracks, pressed states, inert tiles. */
+val Brand700 = Color(0xFFEFE9E0)
 
-// Status. The redesign has no celebratory green: "active" is simply the accent,
-// and the only saturated colour left is the one that warns.
-val StatusActive   = Color(0xFFB5ABFC)
-val StatusInactive = Color(0xFF595D6C)
-val StatusDanger   = Color(0xFFE08D74)
+/** Hairlines and outlines that read as structure, not decoration. */
+val Brand600 = Color(0xFFE6DED2)
 
-// Text ramp, brightest to faintest.
-val TextPrimary   = Color(0xFFE9E9ED)
-val TextMuted     = Color(0xFFCFD3E5)
-val TextSecondary = Color(0xFF9397AB)
-val TextTertiary  = Color(0xFF75798C)
-val TextDisabled  = Color(0xFF595D6C)
+/** A line that needs more presence: dashed "add" borders, strong dividers. */
+val Brand500 = Color(0xFFD7CBBA)
+
+/**
+ * The block overlay and challenge surface. A different surface from the app,
+ * still light: a black screen at the moment someone is already frustrated was
+ * tried and deliberately rejected.
+ */
+val BrandVoid = Color(0xFFF2ECE2)
+
+// Accent: clay. One accent, no second. Warm enough to feel human, dark enough
+// to carry white text.
+
+/** Fills (white on it = 5.9:1) and accent text on the ground (5.4:1). */
+val AccentPrimary = Color(0xFFA8452A)
+
+/** A lighter clay for the rare second step. */
+val AccentSecondary = Color(0xFFC25B3A)
+
+/** Accent-tinted outline: quieter than AccentPrimary, still clearly ours. */
+val AccentGlow = Color(0xFFE3C3B5)
+
+/** Text and icons sitting on an accent wash (7.4:1 on AccentSurface). */
+val AccentBright = Color(0xFF7E3220)
+
+/** Filled accent surface: selected rows, own chat bubbles. */
+val AccentSurface = Color(0xFFF6E7E0)
+
+/** Dimmer accent surface: avatars, group tiles. */
+val AccentSurfaceDim = Color(0xFFFAF0EB)
+
+/** Text that sits on a filled AccentPrimary surface. */
+val OnAccent = Color(0xFFFFFFFF)
+
+// Status. "Active" is simply the accent. There is no destructive red: ending a
+// block early, or dropping a partner, is written in TextSecondary. Possible,
+// never inviting. That is a product decision, not an oversight.
+
+val StatusActive = AccentPrimary
+val StatusInactive = Color(0xFF8C8276)
+
+/**
+ * Borrowed time: an app open on an allowance someone granted. Differs from clay
+ * in lightness as well as hue, so the two live states stay apart without
+ * relying on colour vision. 5.4:1 on the ground.
+ */
+val StatusDanger = Color(0xFF8A5A12)
+val StatusDangerSurface = Color(0xFFF6EDDC)
+val StatusDangerOutline = Color(0xFFDCC28C)
+
+// Text ramp, darkest to faintest.
+
+/** 15.2:1 on the ground. */
+val TextPrimary = Color(0xFF1C1915)
+
+/** 10.6:1. Body copy that should still carry weight. */
+val TextMuted = Color(0xFF3A332C)
+
+/** 5.3:1, the floor for anything a person has to read. */
+val TextSecondary = Color(0xFF6B635A)
+
+/**
+ * Kept as an alias of [TextSecondary]. In Nocturne this was a separate, and
+ * failing, third step; collapsing it fixes every call site at once. Do not give
+ * it a dimmer value again.
+ */
+val TextTertiary = TextSecondary
+
+/** 3.4:1. Icon strokes and genuinely disabled controls only, never text. */
+val TextDisabled = Color(0xFF8C8276)
 
 // Gradient stops kept for the few surfaces that still wash a background.
-val GradientStart = Color(0xFF9184D9)
-val GradientEnd   = Color(0xFF5D5294)
+val GradientStart = Color(0xFFF6E7E0)
+val GradientEnd = Color(0xFFF7F3ED)

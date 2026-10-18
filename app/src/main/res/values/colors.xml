@@ -2,6 +2,6 @@
 <resources>
     <!-- Must stay in step with Brand900 in ui/theme/Color.kt. This is what the
          window shows during the split second before Compose has drawn, and
-         behind the transparent system bars — a mismatch reads as a flash. -->
-    <color name="bo_ground">#161826</color>
+         behind the transparent system bars - a mismatch reads as a flash. -->
+    <color name="bo_ground">#F7F3ED</color>
 </resources>

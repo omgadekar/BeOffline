@@ -1,31 +1,38 @@
 package com.beoffline.app.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
-private val DarkColorScheme = darkColorScheme(
-    primary            = AccentPrimary,
-    onPrimary          = TextPrimary,
-    primaryContainer   = AccentSurface,
+// Paper is a light scheme. There is no dark variant yet, and the app should not
+// follow the system setting until one exists: a half-built dark mode reads as a
+// bug. See project.md for the palette and its contrast ratios.
+private val PaperColorScheme = lightColorScheme(
+    primary = AccentPrimary,
+    onPrimary = OnAccent,
+    primaryContainer = AccentSurface,
     onPrimaryContainer = AccentBright,
-    secondary          = AccentSecondary,
-    background         = Brand900,
-    surface            = Brand800,
-    surfaceVariant     = Brand700,
-    onBackground       = TextPrimary,
-    onSurface          = TextPrimary,
-    onSurfaceVariant   = TextSecondary,
-    outline            = Brand600,
-    outlineVariant     = AccentGlow,
-    error              = StatusDanger,
+    secondary = AccentSecondary,
+    onSecondary = OnAccent,
+    background = Brand900,
+    onBackground = TextPrimary,
+    surface = Brand800,
+    onSurface = TextPrimary,
+    surfaceVariant = Brand700,
+    onSurfaceVariant = TextSecondary,
+    outline = Brand600,
+    outlineVariant = Brand500,
+    error = StatusDanger,
+    onError = OnAccent,
+    errorContainer = StatusDangerSurface,
+    onErrorContainer = StatusDanger
 )
 
 @Composable
 fun BeOfflineTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = DarkColorScheme,
-        typography  = Typography,
-        content     = content
+        colorScheme = PaperColorScheme,
+        typography = Typography,
+        content = content
     )
 }
