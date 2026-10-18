@@ -1,5 +1,9 @@
 package com.beoffline.app.ui.screens
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -54,6 +60,9 @@ import com.beoffline.app.ui.theme.Brand600
 import com.beoffline.app.ui.theme.Brand700
 import com.beoffline.app.ui.theme.Brand800
 import com.beoffline.app.ui.theme.Brand900
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.beoffline.app.ui.theme.StatusDanger
 import com.beoffline.app.ui.theme.TextDisabled
 import com.beoffline.app.ui.theme.TextPrimary
 import com.beoffline.app.ui.theme.TextSecondary
@@ -72,18 +81,62 @@ private enum class WelcomeStep { Pick, When, Permission }
 fun WelcomeScreen(
     onFinished: () -> Unit,
     onShowDisclosure: () -> Unit,
+    onRequestVpn: (List<String>) -> Unit,
     viewModel: BlockCreatorViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
     val suggestions by viewModel.suggestions.collectAsState()
     var step by remember { mutableStateOf(WelcomeStep.Pick) }
 
+    /** True once the user has been sent to Android's accessibility settings. */
+    var sentToSettings by remember { mutableStateOf(false) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // The ongoing notification is how a person knows a block is running at all,
+    // so ask for it once the first block exists rather than on a cold launch.
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { onFinished() }
+
+    fun finish() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            onFinished()
+        }
+    }
+
+    /**
+     * Saves and leaves. Every exit from this flow goes through here, because
+     * every exit has to hand the VPN consent callback to [BlockCreatorViewModel.save].
+     * An earlier version passed an empty lambda, so finishing the flow with the
+     * "nothing loads" option created a block and never asked for consent — the
+     * app then sat there looking armed and blocking nothing.
+     */
+    fun saveAndFinish() {
+        viewModel.save(onNeedVpnPermission = onRequestVpn, onSaved = ::finish)
+    }
+
     LaunchedEffect(Unit) {
         viewModel.load(ruleId = null, startAsLock = true)
         viewModel.loadSuggestions()
     }
-    LaunchedEffect(step) {
-        if (step == WelcomeStep.Permission) viewModel.refreshPermissions()
+
+    // The accessibility switch is flipped outside the app, so the only way to
+    // know it happened is to look again when we come back.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshPermissions()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Came back from settings with the switch actually on: the block can hold,
+    // so save it and get out of the way.
+    LaunchedEffect(state.accessibilityOn, sentToSettings) {
+        if (sentToSettings && state.accessibilityOn) saveAndFinish()
     }
 
     Column(
@@ -179,17 +232,31 @@ fun WelcomeScreen(
                             if (state.needsAccessibility) {
                                 step = WelcomeStep.Permission
                             } else {
-                                viewModel.save(onNeedVpnPermission = {}, onSaved = onFinished)
+                                saveAndFinish()
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
                 } else {
+                    // Deliberately does NOT save. Saving here and leaving meant
+                    // the block existed whether or not the switch was ever
+                    // flipped, so people landed on a list of blocks that were
+                    // quietly doing nothing. The save now happens on return,
+                    // and only once the switch is actually on.
+                    if (sentToSettings && !state.accessibilityOn) {
+                        Text(
+                            text = "Not switched on yet - nothing is blocked until it is.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = StatusDanger,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(10.dp))
+                    }
                     BoPrimaryButton(
-                        text = "Take me to the setting",
+                        text = if (sentToSettings) "Try again" else "Take me to the setting",
                         onClick = {
+                            sentToSettings = true
                             viewModel.openAccessibilitySettings()
-                            viewModel.save(onNeedVpnPermission = {}, onSaved = onFinished)
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -200,7 +267,7 @@ fun WelcomeScreen(
                             .clip(BoShape.Control)
                             .clickable(role = Role.Button) {
                                 viewModel.setStrictness(Strictness.Offline)
-                                viewModel.save(onNeedVpnPermission = {}, onSaved = onFinished)
+                                saveAndFinish()
                             }
                             .padding(vertical = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -212,7 +279,7 @@ fun WelcomeScreen(
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = "Works straight away, nothing to grant",
+                            text = "Still asks for one permission, but a simpler one",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }

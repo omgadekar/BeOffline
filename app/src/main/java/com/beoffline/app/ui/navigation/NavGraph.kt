@@ -98,7 +98,8 @@ fun BeOfflineNavGraph(
                         popUpTo(Screen.Welcome.route) { inclusive = true }
                     }
                 },
-                onShowDisclosure = { navController.navigate(Screen.OpenBlockDisclosure.route) }
+                onShowDisclosure = { navController.navigate(Screen.OpenBlockDisclosure.route) },
+                onRequestVpn = onRequestVpn
             )
         }
 
