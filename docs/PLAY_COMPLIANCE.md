@@ -99,8 +99,11 @@ Fill Play Console → App content → **Data safety** exactly as below. BeOfflin
 | Personal info | User IDs (Firebase UID) | Yes | No | No | Required | Account, app functionality |
 | App activity | App interactions (unlock requests incl. the blocked app's package name + label; approvals) | Yes | Yes* | No | Optional | App functionality |
 | App activity | Other user-generated content (group chat messages) | Yes | Yes* | No | Optional | App functionality |
-| App info & performance | Diagnostics (crash logs via Crashlytics) | Yes | No | No | Optional | Crash reporting |
+| App info & performance | Diagnostics (crash logs via Crashlytics, incl. "Report an issue" text) | Yes | No | No | Optional† | Crash reporting |
 | Device or other IDs | Device ID / FCM token | Yes | No | No | Required | Push notifications |
+
+† Diagnostics is genuinely **optional**: Settings → Crash reports turns Crashlytics collection
+off (and stops "Report an issue" sending anything). Do not answer "Required" here.
 
 \* **"Shared"** here means visible to the accountability partners/group members the user themselves chose — not sold or sent to third parties. In the form, mark these as shared **with other users** for app functionality. Do **not** mark any data as sold or shared with advertisers.
 
@@ -140,7 +143,9 @@ Data we collect
   or the app is uninstalled, we notify the partner(s) you added. This is the core
   accountability feature and is disclosed to you in-app.
 - Device token: a push-notification token so we can deliver approvals and alerts.
-- Diagnostics: anonymous crash reports (Firebase Crashlytics).
+- Diagnostics: anonymous crash reports, and the text typed into "Report an issue",
+  processed by Google LLC (Firebase Crashlytics) with device model and Android version.
+  On by default, switchable off in Settings → Crash reports.
 
 What we do NOT collect
 - We do not read your screen, keystrokes, messages, or app content.
@@ -255,7 +260,15 @@ Implemented end to end:
 ## 9. Content rating & target audience
 
 - **Target audience:** 18+ or 13+ — **not** "children". Do not opt into the Families programme.
-- Complete the **content rating questionnaire**: no violence, no user-to-user content risk beyond the group chat (disclose that the app has **user-generated content / chat** so the rating reflects it, and consider a basic report/block path in chat as a later hardening step).
+- Complete the **content rating questionnaire**: no violence, no user-to-user content risk
+  beyond the group chat (disclose that the app has **user-generated content / chat** so the
+  rating reflects it).
+- **UGC policy — in-app reporting and blocking: shipped.** Long-press any message in group
+  chat → "Report this message" (seven fixed reasons) and, for the group's owner, "Remove
+  <name> from the group". The chat header menu has "Leave this group". Server side:
+  `POST /api/chat/groups/{groupId}/messages/{messageId}/reports` files a moderation row in
+  `ActivityLogs` (exempt from the 30-day prune), and `DELETE /api/groups/{id}/members/{uid}`
+  is the remove/leave path. Point a reviewer at the chat screen if they ask.
 - **Ads:** declare "No ads" (the app has none).
 
 ---
@@ -266,6 +279,7 @@ Implemented end to end:
 - [x] Privacy policy served at a stable URL — §5 *(review wording; live after deploy)*
 - [ ] **Redeploy the backend** so `/privacy`, `/account-deletion`, and `DELETE /api/account` are live
 - [ ] Review privacy-policy/deletion copy + contact email (`LegalPages.cs`)
+- [x] In-app UGC reporting + member removal/leave in group chat — §9 *(code done)*
 - [ ] Data Safety form completed — §4
 - [ ] Accessibility declaration + demo video — §2
 - [ ] VpnService declaration — §3

@@ -1,8 +1,10 @@
 package com.beoffline.app.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,7 +37,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -56,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.beoffline.app.data.model.ChatMessageCache
 import com.beoffline.app.ui.screens.GroupChatViewModel.ChatMember
+import com.beoffline.app.ui.screens.GroupChatViewModel.ReportReason
 import com.beoffline.app.ui.theme.AccentBright
 import com.beoffline.app.ui.theme.AccentPrimary
 import com.beoffline.app.ui.theme.AccentSecondary
@@ -86,9 +96,33 @@ fun GroupChatScreen(
     val members by viewModel.members.collectAsState()
     val mentionNames by viewModel.mentionNames.collectAsState()
     val chatNames by viewModel.chatNames.collectAsState()
+    val isOwner by viewModel.isOwner.collectAsState()
+    val notice by viewModel.notice.collectAsState()
+    val busy by viewModel.busy.collectAsState()
+    val left by viewModel.left.collectAsState()
     val listState = rememberLazyListState()
+    val snackbar = remember { SnackbarHostState() }
     var input by remember { mutableStateOf(TextFieldValue("")) }
     val myUid = viewModel.myUid
+
+    // Long-pressed message, and the two dialogs the chat's own menu can open.
+    var actionsFor by remember { mutableStateOf<ChatMessageCache?>(null) }
+    var reportFor by remember { mutableStateOf<ChatMessageCache?>(null) }
+    var removeFor by remember { mutableStateOf<ChatMessageCache?>(null) }
+    var showLeaveConfirm by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(notice) {
+        notice?.let {
+            snackbar.showSnackbar(it)
+            viewModel.dismissNotice()
+        }
+    }
+
+    // Leaving closes the conversation: there is nothing left to look at.
+    LaunchedEffect(left) {
+        if (left) onBack()
+    }
 
     // Mute notifications for this conversation while it's on screen.
     DisposableEffect(Unit) {
@@ -112,6 +146,7 @@ fun GroupChatScreen(
 
     Scaffold(
         containerColor = Brand900,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = {
@@ -129,6 +164,25 @@ fun GroupChatScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Leave this group", color = TextPrimary) },
+                                onClick = {
+                                    menuOpen = false
+                                    showLeaveConfirm = true
+                                }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -162,7 +216,14 @@ fun GroupChatScreen(
                                 mentionNames = mentionNames,
                                 mentionsMe = myUid != null &&
                                     item.message.mentionedUids?.split(",")?.contains(myUid) == true,
-                                chatNames = chatNames
+                                chatNames = chatNames,
+                                // Your own words, and a message still on its way
+                                // out, have no server id to report yet.
+                                onLongPress = if (item.mine || item.message.pending) {
+                                    null
+                                } else {
+                                    { actionsFor = item.message }
+                                }
                             )
                         }
                     }
@@ -186,6 +247,158 @@ fun GroupChatScreen(
             )
         }
     }
+
+    actionsFor?.let { message ->
+        val name = chatNames[message.senderUid] ?: message.senderName.firstName(fallback = "this member")
+        MessageActionsDialog(
+            senderName = name,
+            canRemove = isOwner,
+            onReport = {
+                reportFor = message
+                actionsFor = null
+            },
+            onRemove = {
+                removeFor = message
+                actionsFor = null
+            },
+            onDismiss = { actionsFor = null }
+        )
+    }
+
+    reportFor?.let { message ->
+        ReportReasonDialog(
+            busy = busy,
+            onPick = { reason ->
+                viewModel.report(message.id, reason)
+                reportFor = null
+            },
+            onDismiss = { reportFor = null }
+        )
+    }
+
+    removeFor?.let { message ->
+        val name = chatNames[message.senderUid] ?: message.senderName.firstName(fallback = "this member")
+        ConfirmDialog(
+            title = "Remove $name?",
+            body = "They stop being part of this group after a cooldown, and everyone here " +
+                "is told. You can invite them back later.",
+            confirmLabel = "Remove",
+            onConfirm = {
+                viewModel.removeMember(message.senderUid)
+                removeFor = null
+            },
+            onDismiss = { removeFor = null }
+        )
+    }
+
+    if (showLeaveConfirm) {
+        ConfirmDialog(
+            title = "Leave $groupName?",
+            body = "You stop seeing this conversation, and the people here stop being able to " +
+                "reach you through it. Everyone is told, and it takes effect after a cooldown.",
+            confirmLabel = "Leave",
+            onConfirm = {
+                showLeaveConfirm = false
+                viewModel.leaveGroup()
+            },
+            onDismiss = { showLeaveConfirm = false }
+        )
+    }
+}
+
+// ── Moderation dialogs ──────────────────────────────────────────────
+// Play's user-generated-content policy: a chat that carries other people's
+// words has to offer a way to report one and a way to get away from whoever
+// wrote it. Long-press a message for the first; the header menu for the second.
+
+@Composable
+private fun MessageActionsDialog(
+    senderName: String,
+    canRemove: Boolean,
+    onReport: () -> Unit,
+    onRemove: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        containerColor = Brand800,
+        onDismissRequest = onDismiss,
+        title = { Text("Message from $senderName", color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                DialogAction("Report this message", onClick = onReport)
+                if (canRemove) DialogAction("Remove $senderName from the group", onClick = onRemove)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) }
+        }
+    )
+}
+
+@Composable
+private fun ReportReasonDialog(
+    busy: Boolean,
+    onPick: (ReportReason) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        containerColor = Brand800,
+        onDismissRequest = onDismiss,
+        title = { Text("What is wrong with it?", color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "The message and who sent it come to us. We read every report.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                ReportReason.entries.forEach { reason ->
+                    DialogAction(reason.label, enabled = !busy) { onPick(reason) }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) }
+        }
+    )
+}
+
+@Composable
+private fun ConfirmDialog(
+    title: String,
+    body: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        containerColor = Brand800,
+        onDismissRequest = onDismiss,
+        title = { Text(title, color = TextPrimary) },
+        text = { Text(body, style = MaterialTheme.typography.bodyMedium, color = TextSecondary) },
+        confirmButton = {
+            // No destructive red anywhere in this app: leaving is possible,
+            // never inviting.
+            TextButton(onClick = onConfirm) { Text(confirmLabel, color = AccentBright) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) }
+        }
+    )
+}
+
+@Composable
+private fun DialogAction(label: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Text(
+        label,
+        style = MaterialTheme.typography.bodyLarge,
+        color = if (enabled) TextPrimary else TextDisabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 12.dp)
+    )
 }
 
 // ── Message list model ─────────────────────────────────────────────────────────
@@ -243,7 +456,9 @@ private fun MessageRow(
     item: ChatItem.Msg,
     mentionNames: List<String>,
     mentionsMe: Boolean,
-    chatNames: Map<String, String>
+    chatNames: Map<String, String>,
+    /** Null when there is nothing to offer for this message. */
+    onLongPress: (() -> Unit)? = null
 ) {
     val message = item.message
     // First name only. A member who has since left the group isn't in the map,
@@ -253,7 +468,8 @@ private fun MessageRow(
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Bubble(
                 message = message, mine = true, senderName = senderName,
-                mentionNames = mentionNames, mentionsMe = false
+                mentionNames = mentionNames, mentionsMe = false,
+                onLongPress = onLongPress
             )
         }
     } else {
@@ -266,12 +482,14 @@ private fun MessageRow(
             Spacer(Modifier.width(8.dp))
             Bubble(
                 message = message, mine = false, showName = item.showHeader,
-                senderName = senderName, mentionNames = mentionNames, mentionsMe = mentionsMe
+                senderName = senderName, mentionNames = mentionNames, mentionsMe = mentionsMe,
+                onLongPress = onLongPress
             )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Bubble(
     message: ChatMessageCache,
@@ -279,7 +497,8 @@ private fun Bubble(
     senderName: String,
     showName: Boolean = false,
     mentionNames: List<String>,
-    mentionsMe: Boolean
+    mentionsMe: Boolean,
+    onLongPress: (() -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(
         topStart = 16.dp, topEnd = 16.dp,
@@ -290,6 +509,13 @@ private fun Bubble(
         .widthIn(max = 300.dp)
         .background(color = if (mine) AccentPrimary else Brand800, shape = shape)
     if (mentionsMe) bubble = bubble.border(1.5.dp, AccentSecondary, shape)
+    if (onLongPress != null) {
+        bubble = bubble.combinedClickable(
+            onClick = {},
+            onLongClick = onLongPress,
+            onLongClickLabel = "Message options"
+        )
+    }
 
     Column(
         modifier = bubble.padding(horizontal = 12.dp, vertical = 8.dp),

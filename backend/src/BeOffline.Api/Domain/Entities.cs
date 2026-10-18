@@ -267,6 +267,24 @@ public sealed class ActivityLog
     public DateTime TimestampUtc { get; set; }
 }
 
+/// <summary>
+/// Moderation records share the <see cref="ActivityLog"/> table rather than a
+/// table of their own: no migration, and the operator already reads this log.
+/// A report is one row with <see cref="Method"/> as a pseudo-method and the
+/// subject encoded in the path, e.g.
+/// <c>/moderation/chat/{groupId}/messages/{messageId}?reason=harassment&amp;sender={uid}</c>.
+/// The reported text is NOT copied here — the ChatMessages row still holds it,
+/// so the log gains no new sensitive surface. These rows are exempt from the
+/// 30-day log prune in SweepService; a report has to outlive the request log.
+/// </summary>
+public static class ModerationLog
+{
+    public const string Method = "REPORT";
+
+    public static string PathFor(Guid groupId, Guid messageId) =>
+        $"/moderation/chat/{groupId}/messages/{messageId}";
+}
+
 /// <summary>One row per unhandled exception that reached the pipeline.</summary>
 public sealed class ErrorLog
 {

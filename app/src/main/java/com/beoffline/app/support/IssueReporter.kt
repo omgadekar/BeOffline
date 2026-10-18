@@ -7,15 +7,25 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class IssueReporter @Inject constructor() {
+class IssueReporter @Inject constructor(
+    private val crashReporting: CrashReportingManager
+) {
 
+    /**
+     * Sends the report to Crashlytics. Returns false, having sent nothing, when
+     * crash reporting is switched off — the title and detail someone types here
+     * go to Google like everything else does, so the Settings switch has to
+     * govern this path too, not just crash stacks.
+     */
     fun submitIssue(
         title: String,
         details: String,
         isVpnRunning: Boolean,
         activeRulesCount: Int,
         totalRulesCount: Int
-    ) {
+    ): Boolean {
+        if (!crashReporting.isEnabled()) return false
+
         val crashlytics = FirebaseCrashlytics.getInstance()
 
         crashlytics.log("User submitted an issue report from the dashboard")
@@ -37,6 +47,7 @@ class IssueReporter @Inject constructor() {
         crashlytics.setCustomKey("total_rules_count", totalRulesCount)
 
         crashlytics.recordException(UserReportedIssueException(title.take(80)))
+        return true
     }
 }
 
