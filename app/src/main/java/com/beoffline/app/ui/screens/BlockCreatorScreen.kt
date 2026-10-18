@@ -79,6 +79,7 @@ private val DAY_LABELS = listOf(1 to "M", 2 to "T", 3 to "W", 4 to "T", 5 to "F"
 fun BlockCreatorScreen(
     ruleId: Int?,
     startAsLock: Boolean,
+    focusPackage: String? = null,
     onNavigateToAppPicker: () -> Unit,
     onShowDisclosure: () -> Unit,
     onRequestVpn: (List<String>) -> Unit,
@@ -87,7 +88,7 @@ fun BlockCreatorScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(ruleId, startAsLock) { viewModel.load(ruleId, startAsLock) }
+    LaunchedEffect(ruleId, startAsLock) { viewModel.load(ruleId, startAsLock, focusPackage) }
 
     var picking by remember { mutableStateOf<TimeField?>(null) }
     var confirmingDelete by remember { mutableStateOf(false) }
@@ -181,7 +182,7 @@ fun BlockCreatorScreen(
         ) {
             Spacer(Modifier.height(10.dp))
 
-            Question(number = 1, title = "Which apps?")
+            Question(number = 1, title = "Which app?")
             AppChips(
                 state = state,
                 onAdd = onNavigateToAppPicker,
@@ -295,6 +296,17 @@ fun BlockCreatorScreen(
                         }
                     }
                 }
+            }
+
+            if (state.movingFromOtherBlocks.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Note(
+                    (if (state.movingFromOtherBlocks.size == 1) {
+                        "${state.movingFromOtherBlocks.first()} is already in another block."
+                    } else {
+                        "${state.movingFromOtherBlocks.joinToString(", ")} are already in other blocks."
+                    }) + " Saving moves it here, so each app has one set of rules and one row on your list."
+                )
             }
 
             val error = state.scheduleError
@@ -459,6 +471,7 @@ private fun AppChips(
             }
         }
 
+        // One app per block, so this is "choose" or "change", never "add".
         Row(
             modifier = Modifier
                 .clip(BoShape.Pill)
@@ -468,14 +481,16 @@ private fun AppChips(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(
-                Icons.Outlined.Add,
-                contentDescription = null,
-                tint = AccentPrimary,
-                modifier = Modifier.size(15.dp)
-            )
+            if (state.selectedAppInfos.isEmpty()) {
+                Icon(
+                    Icons.Outlined.Add,
+                    contentDescription = null,
+                    tint = AccentPrimary,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
             Text(
-                text = if (state.selectedAppInfos.isEmpty()) "Choose apps" else "Add",
+                text = if (state.selectedAppInfos.isEmpty()) "Choose an app" else "Change",
                 style = MaterialTheme.typography.labelLarge,
                 color = AccentPrimary
             )

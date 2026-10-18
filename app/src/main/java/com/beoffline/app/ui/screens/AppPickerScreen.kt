@@ -66,6 +66,12 @@ import com.beoffline.app.ui.theme.TextTertiary
 @Composable
 fun AppPickerScreen(
     initiallySelected: List<String> = emptyList(),
+    /**
+     * One app per block, so picking is a choice rather than a basket: tapping a
+     * row selects it and returns. Multi-select exists only for the legacy rules
+     * that were created before the rule was one-app-only.
+     */
+    singleSelect: Boolean = true,
     onDone: (List<String>) -> Unit,
     viewModel: AppPickerViewModel = hiltViewModel()
 ) {
@@ -107,7 +113,7 @@ fun AppPickerScreen(
                 modifier = Modifier.weight(1f)
             )
             Text(
-                text = "Done ${uiState.selectedPackages.size}",
+                text = if (singleSelect) "Cancel" else "Done ${uiState.selectedPackages.size}",
                 style = MaterialTheme.typography.labelLarge,
                 color = AccentBright,
                 modifier = Modifier
@@ -153,7 +159,13 @@ fun AppPickerScreen(
                     AppPickerRow(
                         appInfo = appInfo,
                         isSelected = appInfo.packageName in uiState.selectedPackages,
-                        onToggle = { viewModel.toggleSelection(appInfo.packageName) }
+                        onToggle = {
+                            if (singleSelect) {
+                                onDone(listOf(appInfo.packageName))
+                            } else {
+                                viewModel.toggleSelection(appInfo.packageName)
+                            }
+                        }
                     )
                 }
             }

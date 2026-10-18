@@ -42,11 +42,12 @@ sealed class Screen(val route: String) {
      * The one creator, for both strictness levels. [lock] decides which table
      * the result lands in, and the user never sees the word.
      */
-    object BlockCreator : Screen("block_creator?ruleId={ruleId}&lock={lock}") {
-        fun createRoute(ruleId: Int? = null, lock: Boolean = false) =
+    object BlockCreator : Screen("block_creator?ruleId={ruleId}&lock={lock}&pkg={pkg}") {
+        fun createRoute(ruleId: Int? = null, lock: Boolean = false, pkg: String? = null) =
             buildString {
                 append("block_creator?lock=$lock")
                 if (ruleId != null) append("&ruleId=$ruleId")
+                if (pkg != null) append("&pkg=$pkg")
             }
     }
 
@@ -110,7 +111,11 @@ fun BeOfflineNavGraph(
                 onRequestVpn = onRequestVpn,
                 onOpenApp = { row ->
                     navController.navigate(
-                        Screen.BlockCreator.createRoute(ruleId = row.ruleId, lock = row.isLock)
+                        Screen.BlockCreator.createRoute(
+                            ruleId = row.ruleId,
+                            lock = row.isLock,
+                            pkg = row.packageName
+                        )
                     )
                 },
                 onAddApp = { navController.navigate(Screen.BlockCreator.createRoute()) },
@@ -123,15 +128,18 @@ fun BeOfflineNavGraph(
             route = Screen.BlockCreator.route,
             arguments = listOf(
                 navArgument("ruleId") { type = NavType.StringType; nullable = true; defaultValue = null },
-                navArgument("lock") { type = NavType.BoolType; defaultValue = false }
+                navArgument("lock") { type = NavType.BoolType; defaultValue = false },
+                navArgument("pkg") { type = NavType.StringType; nullable = true; defaultValue = null }
             )
         ) { backStackEntry ->
             val ruleId = backStackEntry.arguments?.getString("ruleId")?.toIntOrNull()
             val lock = backStackEntry.arguments?.getBoolean("lock") ?: false
+            val pkg = backStackEntry.arguments?.getString("pkg")
             val viewModel: BlockCreatorViewModel = hiltViewModel(backStackEntry)
             BlockCreatorScreen(
                 ruleId = ruleId,
                 startAsLock = lock,
+                focusPackage = pkg,
                 viewModel = viewModel,
                 onNavigateToAppPicker = { navController.navigate(Screen.AppPicker.route) },
                 onShowDisclosure = { navController.navigate(Screen.OpenBlockDisclosure.route) },
@@ -148,6 +156,7 @@ fun BeOfflineNavGraph(
 
             AppPickerScreen(
                 initiallySelected = creatorViewModel.uiState.value.selectedPackages,
+                singleSelect = true,
                 onDone = { selectedPackages ->
                     creatorViewModel.onPackagesSelected(selectedPackages)
                     navController.popBackStack()

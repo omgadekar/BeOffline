@@ -63,6 +63,14 @@ data class BlockCreatorUiState(
      * where it came from the old row cannot be cleaned up.
      */
     val loadedAsLock: Boolean? = null,
+    /** App names currently held by a different block, which saving will move here. */
+    val movingFromOtherBlocks: List<String> = emptyList(),
+    /**
+     * This row came out of a rule covering several apps — one made before a
+     * block meant one app. Saving splits it off into its own block and leaves
+     * the others where they are, so the list quietly migrates as people edit.
+     */
+    val splitFromLegacy: Boolean = false,
     val isLoading: Boolean = false
 ) {
     val isLock: Boolean get() = strictness == Strictness.Locked
@@ -250,7 +258,7 @@ class BlockCreatorViewModel @Inject constructor(
     /** Pre-33 there is no runtime prompt, so the settings page is the only route. */
     fun openNotificationSettings() = backgroundProtectionManager.openNotificationSettings()
 
-    fun load(ruleId: Int?, startAsLock: Boolean) {
+    fun load(ruleId: Int?, startAsLock: Boolean, focusPackage: String? = null) {
         if (loaded) return
         loaded = true
         refreshPermissions()
@@ -278,7 +286,8 @@ class BlockCreatorViewModel @Inject constructor(
                     timerMinutes = rule.timerDurationMinutes,
                     isActive = rule.isActive,
                     timerStartedAt = rule.timerStartedAt,
-                    createdAt = rule.createdAt
+                    createdAt = rule.createdAt,
+                    focusPackage = focusPackage
                 )
             } else {
                 val rule = blockRuleRepository.getRuleById(ruleId) ?: return@launch
@@ -295,7 +304,8 @@ class BlockCreatorViewModel @Inject constructor(
                     timerMinutes = rule.timerDurationMinutes,
                     isActive = rule.isActive,
                     timerStartedAt = rule.timerStartedAt,
-                    createdAt = rule.createdAt
+                    createdAt = rule.createdAt,
+                    focusPackage = focusPackage
                 )
             }
         }
@@ -315,13 +325,19 @@ class BlockCreatorViewModel @Inject constructor(
         timerMinutes: Int?,
         isActive: Boolean,
         timerStartedAt: Long?,
-        createdAt: Long
+        createdAt: Long,
+        focusPackage: String?
     ) {
+        // A legacy rule can cover several apps. The row that was tapped names
+        // one of them, so scope to it and let the save split it out.
+        val split = focusPackage != null && packages.size > 1 && focusPackage in packages
+        val scoped = if (split) listOf(focusPackage!!) else packages
         _uiState.update {
             it.copy(
                 id = id,
                 strictness = strictness,
-                selectedPackages = packages,
+                selectedPackages = scoped,
+                splitFromLegacy = split,
                 whenKind = when (ruleType) {
                     RuleType.PERMANENT -> WhenKind.Always
                     RuleType.SCHEDULED -> WhenKind.Hours
@@ -340,9 +356,9 @@ class BlockCreatorViewModel @Inject constructor(
                 loadedAsLock = strictness == Strictness.Locked
             )
         }
-        val infos = resolveAppInfos(packages)
+        val infos = resolveAppInfos(scoped)
         _uiState.update { current ->
-            if (current.selectedPackages == packages) current.copy(selectedAppInfos = infos) else current
+            if (current.selectedPackages == scoped) current.copy(selectedAppInfos = infos) else current
         }
     }
 
@@ -350,8 +366,14 @@ class BlockCreatorViewModel @Inject constructor(
         _uiState.update { it.copy(selectedPackages = packages) }
         viewModelScope.launch {
             val infos = resolveAppInfos(packages)
+            val state = _uiState.value
+            val moving = packagesHeldElsewhere(packages, selfId = state.id, selfIsLock = state.isLock)
             _uiState.update { current ->
-                if (current.selectedPackages == packages) current.copy(selectedAppInfos = infos) else current
+                if (current.selectedPackages == packages) {
+                    current.copy(selectedAppInfos = infos, movingFromOtherBlocks = moving)
+                } else {
+                    current
+                }
             }
         }
     }
@@ -397,7 +419,7 @@ class BlockCreatorViewModel @Inject constructor(
             // table, and leave the original behind still enforcing. So the old
             // row is deleted and the new one inserted fresh.
             val movedTable = state.loadedAsLock != null && state.loadedAsLock != state.isLock
-            if (movedTable) {
+            if (movedTable && !state.splitFromLegacy) {
                 val oldId = state.id
                 if (oldId != null) {
                     if (state.loadedAsLock == true) {
@@ -414,7 +436,7 @@ class BlockCreatorViewModel @Inject constructor(
                     }
                 }
             }
-            val writeId = if (movedTable) null else state.id
+            val writeId = if (movedTable || state.splitFromLegacy) null else state.id
 
             if (state.isLock) {
                 val rule = OpenBlockRule(
@@ -444,6 +466,8 @@ class BlockCreatorViewModel @Inject constructor(
                     WhenKind.Timer -> OpenBlockScheduler.scheduleTimerStop(context, saved)
                     WhenKind.Always -> Unit
                 }
+
+                claimPackages(state.selectedPackages, keepLockId = saved.id, keepBlockId = null)
             } else {
                 val rule = BlockRule(
                     id = writeId ?: 0,
@@ -471,6 +495,8 @@ class BlockCreatorViewModel @Inject constructor(
                     WhenKind.Timer -> RuleScheduler.scheduleTimerStop(context, saved)
                     WhenKind.Always -> Unit
                 }
+
+                claimPackages(state.selectedPackages, keepLockId = null, keepBlockId = saved.id)
 
                 // The tunnel has to carry every offline package, not just this one.
                 val allOffline = blockRuleRepository.getActiveRulesOnce()
@@ -524,6 +550,71 @@ class BlockCreatorViewModel @Inject constructor(
         }
     }
 
+
+    /**
+     * Gives [packages] to one block and takes them from every other.
+     *
+     * The home screen is a list of apps, one row each, and a row can only show
+     * one state — so an app has to belong to exactly one block. Without this,
+     * adding YouTube to a second block left it in the first as well: the list
+     * still showed one YouTube row, but removing it took two trips, one through
+     * each block, with no way to tell from the screen that the second existed.
+     *
+     * A block stripped of its last app is deleted rather than left as an empty
+     * row that blocks nothing.
+     */
+    private suspend fun claimPackages(packages: List<String>, keepLockId: Int?, keepBlockId: Int?) {
+        val claimed = packages.toSet()
+
+        openBlockRuleRepository.getAllRulesOnce().forEach { rule ->
+            if (rule.id == keepLockId) return@forEach
+            val remaining = rule.blockedPackages.filterNot { it in claimed }
+            if (remaining.size == rule.blockedPackages.size) return@forEach
+            if (remaining.isEmpty()) {
+                OpenBlockScheduler.cancelRule(context, rule.id)
+                openBlockRuleRepository.deleteRule(rule)
+            } else {
+                openBlockRuleRepository.updateRule(rule.copy(blockedPackages = remaining))
+            }
+        }
+
+        var tunnelChanged = false
+        blockRuleRepository.getAllRulesOnce().forEach { rule ->
+            if (rule.id == keepBlockId) return@forEach
+            val remaining = rule.blockedPackages.filterNot { it in claimed }
+            if (remaining.size == rule.blockedPackages.size) return@forEach
+            tunnelChanged = true
+            if (remaining.isEmpty()) {
+                RuleScheduler.cancelRule(context, rule.id)
+                blockRuleRepository.deleteRule(rule)
+            } else {
+                blockRuleRepository.updateRule(rule.copy(blockedPackages = remaining))
+            }
+        }
+        // Only needed when a lock took packages off an internet block; the
+        // internet-block branch rebuilds the tunnel itself straight after.
+        if (tunnelChanged && keepBlockId == null) syncTunnelToRemainingRules()
+    }
+
+    /**
+     * App names already covered by a different block, so the creator can say
+     * that saving will move them rather than doing it silently.
+     */
+    private suspend fun packagesHeldElsewhere(packages: List<String>, selfId: Int?, selfIsLock: Boolean): List<String> {
+        val wanted = packages.toSet()
+        val held = mutableSetOf<String>()
+        openBlockRuleRepository.getAllRulesOnce().forEach { rule ->
+            if (selfIsLock && rule.id == selfId) return@forEach
+            held += rule.blockedPackages.filter { it in wanted }
+        }
+        blockRuleRepository.getAllRulesOnce().forEach { rule ->
+            if (!selfIsLock && rule.id == selfId) return@forEach
+            held += rule.blockedPackages.filter { it in wanted }
+        }
+        if (held.isEmpty()) return emptyList()
+        return resolveAppInfos(held.toList()).map { it.appName }
+    }
+
     /**
      * The entity still wants a name; the user no longer has to invent one. The
      * apps are the name, which is also what every row in the list shows.
@@ -533,8 +624,7 @@ class BlockCreatorViewModel @Inject constructor(
         return when {
             names.isEmpty() -> "Block"
             names.size == 1 -> names.first()
-            names.size == 2 -> "${names[0]} and ${names[1]}"
-            else -> "${names[0]} and ${names.size - 1} more"
+            else -> names.first()
         }
     }
 
