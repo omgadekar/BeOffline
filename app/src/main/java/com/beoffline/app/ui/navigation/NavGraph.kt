@@ -1,5 +1,13 @@
 package com.beoffline.app.ui.navigation
 
+import android.provider.Settings
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -8,6 +16,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -88,9 +98,46 @@ fun BeOfflineNavGraph(
         onNavRouteHandled()
     }
 
+    // Navigation Compose's default is a 700ms full-screen crossfade. On a light
+    // ground, where both screens are nearly the same brightness, that reads as
+    // the whole screen washing for most of a second with nothing directional to
+    // follow — which is uncomfortable to the point of making people queasy.
+    //
+    // A short horizontal slide gives the eye something to track and says which
+    // way you are going, and the fade underneath it is quick enough that the two
+    // screens barely overlap. The offset is a twelfth of the width, about 32dp:
+    // enough to read as movement, far less than a full push.
+    val context = LocalContext.current
+    val animate = remember(context) {
+        Settings.Global.getFloat(
+            context.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f
+        ) > 0f
+    }
+    val slide = tween<IntOffset>(durationMillis = 280)
+
     NavHost(
         navController = navController,
-        startDestination = if (startOnWelcome) Screen.Welcome.route else Screen.Shell.route
+        startDestination = if (startOnWelcome) Screen.Welcome.route else Screen.Shell.route,
+        // Someone who has turned animations down in Android's settings has
+        // already told us they do not want this.
+        enterTransition = {
+            if (!animate) EnterTransition.None
+            else slideInHorizontally(slide) { it / 12 } + fadeIn(tween(200))
+        },
+        exitTransition = {
+            if (!animate) ExitTransition.None
+            else slideOutHorizontally(slide) { -it / 12 } + fadeOut(tween(140))
+        },
+        popEnterTransition = {
+            if (!animate) EnterTransition.None
+            else slideInHorizontally(slide) { -it / 12 } + fadeIn(tween(200))
+        },
+        popExitTransition = {
+            if (!animate) ExitTransition.None
+            else slideOutHorizontally(slide) { it / 12 } + fadeOut(tween(140))
+        }
     ) {
         composable(Screen.Welcome.route) {
             WelcomeScreen(
