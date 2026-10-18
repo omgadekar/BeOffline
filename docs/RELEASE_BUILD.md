@@ -130,6 +130,7 @@ Generated, correctly sized, in `docs/play-listing/`:
 
 | File | Size | Play slot |
 |---|---|---|
+| `play-icon-512.png` | 512 × 512 | App icon (required) |
 | `feature-graphic.png` | 1024 × 500 | Feature graphic (required) |
 | `screenshot-1..5.png` | 1080 × 1920 | Phone screenshots (2–8 required, 9:16) |
 
@@ -141,11 +142,26 @@ the app accurately. Once the device pass is done, compare each one against the r
 and either regenerate or re-shoot. If the real UI differs, the screenshots are wrong and that
 is a listing violation, not a cosmetic issue.
 
+**The app icon is new in this release**, so the listing icon must be replaced — leaving the
+old one up means the store shows a violet icon for a light app. The mark is an open ring with
+a bead that has come loose: the loop is deliberately not closed, because the product's
+position is that it is not a cage. The old icon was a phone with struck-through signal bars,
+which read as "no mobile signal" and was punitive in a way the app is not.
+
+The launcher icon was rebuilt alongside it, from the same geometry, so the installed icon and
+the store icon cannot drift:
+
+- `app/src/main/res/drawable/ic_launcher_foreground.xml` — the mark only
+- `app/src/main/res/drawable/ic_launcher_background.xml` — flat paper
+- `app/src/main/res/mipmap-*/ic_launcher.png` — the pre-API-26 raster fallback
+
+The previous adaptive icon baked a whole rounded-square tile, background included, into the
+*foreground* layer, so a circular launcher mask showed a square floating inside a circle.
+That is fixed: background layer is the paper, foreground layer is the mark, sized inside the
+66dp safe zone.
+
 Still needed and **not** generated here:
 
-- **App icon, 512 × 512 PNG.** The existing launcher icon is unchanged by this release, so
-  whatever is on the listing today is still accurate. Worth revisiting: it was drawn for the
-  dark violet theme and now sits next to a light, warm app.
 - **Accessibility demo video.** Required for the accessibility declaration (§2 of
   `PLAY_COMPLIANCE.md`). Any existing video shows the old five-tab UI and is now misleading —
   re-record it against 1.1.0.

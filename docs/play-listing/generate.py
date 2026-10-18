@@ -305,6 +305,44 @@ SHOTS = [
 ]
 
 
+# ── the app icon ────────────────────────────────────────────────────────────
+#
+# One geometry, three outputs, so the store icon and the installed icon cannot
+# drift apart. It is the same mark as app/src/main/res/drawable/
+# ic_launcher_foreground.xml, in the same 108-unit space.
+#
+# The viewBox is "18 18 72 72" — the central 72 of 108 — because that is the
+# region an Android launcher mask actually shows. Rendering the full 108 would
+# make the store icon look noticeably smaller than the one on the home screen.
+
+MARK_SVG = f"""
+<svg viewBox="18 18 72 72" width="{{size}}" height="{{size}}"
+     xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision">
+  <rect x="18" y="18" width="72" height="72" fill="{GROUND}"/>
+  <g transform="rotate(35 54 54)">
+  <path d="M68.14,37.15 A22,22 0 1 1 39.86,37.15"
+        fill="none" stroke="{CLAY}" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="54" cy="26.5" r="4.5" fill="{CLAY}"/>
+  </g>
+</svg>
+"""
+
+# The legacy raster launcher icon, for the pre-adaptive fallback slot. minSdk is
+# 26 so a launcher should never reach for these, but android:icon still points
+# at them and some surfaces do.
+MIPMAPS = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
+
+
+def icon_page(size: int, rounded: bool) -> str:
+    radius = f"border-radius:{round(size * 0.22)}px;" if rounded else ""
+    return page(
+        f'<div style="width:{size}px;height:{size}px;{radius}overflow:hidden;'
+        f'background:{GROUND}">{MARK_SVG.format(size=size)}</div>',
+        size,
+        size,
+    )
+
+
 def find_chrome() -> str:
     for c in CHROME_CANDIDATES:
         if Path(c).exists():
@@ -347,6 +385,17 @@ def main() -> None:
     render(chrome, FEATURE, HERE / "feature-graphic.png", 1024, 500)
     for i, (caption, screen) in enumerate(SHOTS, start=1):
         render(chrome, shot(caption, screen), HERE / f"screenshot-{i}.png", 1080, 1920)
+
+    # The store icon: square, full bleed. Play rounds the corners itself.
+    render(chrome, icon_page(512, rounded=False), HERE / "play-icon-512.png", 512, 512)
+
+    res = HERE.parent.parent / "app" / "src" / "main" / "res"
+    if res.is_dir():
+        print("\nLegacy launcher icons:")
+        for density, size in MIPMAPS.items():
+            out = res / f"mipmap-{density}" / "ic_launcher.png"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            render(chrome, icon_page(size, rounded=True), out, size, size)
 
     print("\nDone. Upload order in the listing is the file order above.")
 
