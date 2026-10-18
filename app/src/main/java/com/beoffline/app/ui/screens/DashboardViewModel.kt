@@ -11,6 +11,7 @@ import com.beoffline.app.data.model.RuleType
 import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.scheduler.RuleScheduler
 import com.beoffline.app.support.BlockedTrafficAlertManager
+import com.beoffline.app.support.CrashReportingManager
 import com.beoffline.app.support.IssueReporter
 import com.beoffline.app.vpn.VpnController
 import com.beoffline.app.vpn.VpnStateManager
@@ -33,6 +34,9 @@ data class DashboardUiState(
     val backgroundProtection: BackgroundProtectionStatus? = null,
     val isVpnPermissionGranted: Boolean = false,
     val blockedTrafficAlertsEnabled: Boolean = true,
+    val crashReportingEnabled: Boolean = true,
+    /** Set when an issue report could not be sent because crash reports are off. */
+    val issueReportBlocked: Boolean = false,
     val showWelcomeDialog: Boolean = false,
     val isLoading: Boolean = false
 )
@@ -43,6 +47,7 @@ class DashboardViewModel @Inject constructor(
     private val backgroundProtectionManager: BackgroundProtectionManager,
     private val repository: BlockRuleRepository,
     private val blockedTrafficAlertManager: BlockedTrafficAlertManager,
+    private val crashReportingManager: CrashReportingManager,
     private val issueReporter: IssueReporter,
     private val vpnController: VpnController,
     private val vpnStateManager: VpnStateManager
@@ -52,7 +57,8 @@ class DashboardViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(
         DashboardUiState(
             isLoading = true,
-            blockedTrafficAlertsEnabled = blockedTrafficAlertManager.isEnabled()
+            blockedTrafficAlertsEnabled = blockedTrafficAlertManager.isEnabled(),
+            crashReportingEnabled = crashReportingManager.isEnabled()
         )
     )
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
@@ -193,16 +199,24 @@ class DashboardViewModel @Inject constructor(
         _uiState.update { it.copy(blockedTrafficAlertsEnabled = enabled) }
     }
 
+    fun setCrashReportingEnabled(enabled: Boolean) {
+        crashReportingManager.setEnabled(enabled)
+        _uiState.update { it.copy(crashReportingEnabled = enabled) }
+    }
+
     fun submitIssueReport(title: String, details: String) {
         val snapshot = _uiState.value
-        issueReporter.submitIssue(
+        val sent = issueReporter.submitIssue(
             title = title,
             details = details,
             isVpnRunning = snapshot.isVpnRunning,
             activeRulesCount = snapshot.activeRules.size,
             totalRulesCount = snapshot.rules.size
         )
+        _uiState.update { it.copy(issueReportBlocked = !sent) }
     }
+
+    fun dismissIssueReportBlocked() = _uiState.update { it.copy(issueReportBlocked = false) }
 
     private suspend fun deactivateRuleInternal(rule: BlockRule) {
         repository.setRuleActive(rule.id, false)

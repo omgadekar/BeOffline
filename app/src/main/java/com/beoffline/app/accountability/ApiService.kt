@@ -55,6 +55,17 @@ interface ApiService {
         @Query("limit") limit: Int = 50
     ): List<ChatMessageDto>
 
+    /**
+     * Report a message. Idempotent per (reporter, message): a second tap comes
+     * back with alreadyReported = true rather than filing another report.
+     */
+    @POST("api/chat/groups/{id}/messages/{messageId}/reports")
+    suspend fun reportChatMessage(
+        @Path("id") groupId: String,
+        @Path("messageId") messageId: String,
+        @Body body: ReportChatMessageBody
+    ): ChatMessageReportDto
+
     // ── Unlock requests ───────────────────────────────────────────────────────
     @POST("api/requests")
     suspend fun createRequest(@Body body: CreateRequestBody): UnlockRequestDto
@@ -95,6 +106,7 @@ interface ApiService {
 data class AcceptInviteBody(val code: String)
 data class CreateGroupBody(val name: String)
 data class JoinGroupBody(val code: String)
+data class ReportChatMessageBody(val reason: String)
 data class SendChatBody(
     val clientMessageId: String,
     val body: String,
@@ -192,6 +204,14 @@ data class GroupDto(
     val ownerUid: String,
     val createdAtUtc: String,
     val members: List<GroupMemberDto>
+)
+
+data class ChatMessageReportDto(
+    val messageId: String,
+    val senderUid: String,
+    val reason: String,
+    val reportedAtUtc: String,
+    val alreadyReported: Boolean
 )
 
 data class ChatMessageDto(
