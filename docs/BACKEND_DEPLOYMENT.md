@@ -32,26 +32,51 @@ below matches it.
 
 ## Before you build
 
-### ⚠️ One thing in the working tree must not ship
+### The approver cooldown is deliberately 0 in production
 
-`backend/src/BeOffline.Api/appsettings.json` currently has:
+`Accountability:ApproverActivationCooldownHours` is the anti-puppet delay. When a pairing or
+group membership is created while either side already has a relationship, the new approver
+cannot approve anything until the cooldown elapses (`GroupsController.cs:126`). A genuine
+first-ever relationship is immediate at any setting, so the only case this delay ever touches
+is the second one — which is also the puppet case: make an account you control, pair with it,
+approve your own unlocks.
 
-```json
-"ApproverActivationCooldownHours": 0
-```
+**It is set to 0 by product decision.** That is a real trade: with it off, nothing stops a
+determined user from approving their own requests through a second account. The accountability
+layer still works for people who want it to; it just no longer resists someone who doesn't.
+Revisit it if the social layer ever has to be trustworthy rather than merely useful.
 
-That is a local testing change — it switches off the anti-puppet cooldown, the rule stopping
-someone pairing with a second account they control and instantly approving their own unlocks.
-**Production wants 12.**
+Where each value lives:
 
-It also turns the backend test suite red: two `GroupFlowTests` cases assert that a new member
-*cannot* approve immediately, and they fail with the cooldown at 0. Two expected failures are
-a good place for a real one to hide. Moving the override into
-`appsettings.Development.json` fixes both problems at once.
+| File | Value | Why |
+|---|---|---|
+| `appsettings.json` (committed) | `12` | The test baseline. Two `GroupFlowTests` cases assert a new member *cannot* approve immediately; at 0 they fail, and two expected failures are a good place for a real one to hide. |
+| `appsettings.Development.json` (committed) | `0` | Local runs, so approvals are instant while testing. |
+| `appsettings.Production.json` (on the VM) | `0` | What actually runs. |
+
+On the VM, make sure the production file carries it:
 
 ```bash
-git diff -- backend/src/BeOffline.Api/appsettings.json
+ssh ubuntu@<VM_IP>
+nano /opt/beoffline-api/appsettings.Production.json
 ```
+
+```json
+"Accountability": {
+  "ApproverActivationCooldownHours": 0
+}
+```
+
+Then `sudo systemctl restart beoffline-api`. The setting is read per request, but the file is
+only loaded at start.
+
+To check what production is actually running without editing anything:
+
+```bash
+ssh ubuntu@<VM_IP> "grep -A2 Accountability /opt/beoffline-api/appsettings.Production.json"
+```
+
+If that returns nothing, the key is absent and the committed `12` is in force.
 
 ### Secrets never leave the VM
 
