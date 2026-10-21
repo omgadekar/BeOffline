@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  The background layer of the adaptive icon: flat warm paper, matching Brand900
+  in ui/theme/Color.kt. Flat on purpose - an adaptive background is panned and
+  scaled by the launcher's parallax, and a gradient smears when it moves.
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <gradient
-        android:startColor="#4836AC"
-        android:centerColor="#302784"
-        android:endColor="#241D63"
-        android:angle="270" />
+    <solid android:color="#F7F3ED" />
 </shape>

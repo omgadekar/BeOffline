@@ -54,10 +54,13 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
 
                         repository.setRuleActive(ruleId, true)
 
-                        val activeRules = repository.getActiveRulesOnce()
-                        val activePackages = activeRules.flatMap { it.blockedPackages }.distinct()
-                        VpnResilienceScheduler.ensureHealthMonitor(context)
-                        vpnController.startVpn(activePackages)
+                        // Only the rules whose window (or timer) is live right
+                        // now belong in the tunnel — see RuleScheduler.isEnforcingNow.
+                        val enforced = RuleScheduler.enforcedPackages(repository.getActiveRulesOnce())
+                        if (enforced.isNotEmpty()) {
+                            VpnResilienceScheduler.ensureHealthMonitor(context)
+                            vpnController.startVpn(enforced)
+                        }
 
                         if (rule.ruleType == RuleType.SCHEDULED) {
                             RuleScheduler.scheduleRule(context, rule.copy(isActive = true))
@@ -69,14 +72,13 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
                         repository.setRuleActive(ruleId, false)
                         repository.setTimerStartedAt(ruleId, null)
 
-                        val remainingRules = repository.getActiveRulesOnce()
-                        if (remainingRules.isEmpty()) {
+                        val remaining = RuleScheduler.enforcedPackages(repository.getActiveRulesOnce())
+                        if (remaining.isEmpty()) {
                             VpnResilienceScheduler.cancelHealthMonitor(context)
                             vpnController.stopVpn()
                         } else {
-                            val remainingPackages = remainingRules.flatMap { it.blockedPackages }.distinct()
                             VpnResilienceScheduler.ensureHealthMonitor(context)
-                            vpnController.startVpn(remainingPackages)
+                            vpnController.startVpn(remaining)
                         }
 
                         if (rule?.ruleType == RuleType.SCHEDULED) {

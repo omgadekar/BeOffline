@@ -3,7 +3,7 @@
 Everything you need to submit the accountability + App Lock update for review, grounded in what the app actually declares and does. Work the **Action items** first — two of them are hard blockers for approval.
 
 - **Package:** `com.beoffline.app` · **Developer:** OmGLabs
-- **minSdk 26 / targetSdk 35**
+- **minSdk 26 / targetSdk 36**
 - Sensitive surfaces in this build: **AccessibilityService**, **VpnService**, **user accounts (Google Sign-In)**, **server-side personal data**, **FCM**.
 
 ---
@@ -286,7 +286,7 @@ Implemented end to end:
 - [ ] FGS declaration — §6.1
 - [ ] Store listing rewritten, banned words removed — §8
 - [ ] Release SHA-1/SHA-256 + Play App Signing key added to Firebase (already done for testing)
-- [ ] `versionCode` bumped for the release
+- [x] `versionCode` bumped for the release - 10 / 1.1.0, see docs/RELEASE_BUILD.md
 - [ ] Roll out to **closed testing** first, then production
 
 ---

@@ -51,13 +51,18 @@ data class AppsUiState(
     val subline: String = "",
     val isLoading: Boolean = true,
     /**
-     * A lock is switched on but the accessibility service behind it is not.
-     * The rule looks active everywhere and enforces nothing, which is the one
-     * failure this app must never keep quiet about.
+     * A block is switched on and the permission it needs is not granted, so it
+     * looks active everywhere and enforces nothing. This is the one failure the
+     * app must never keep quiet about — a person trusting a block that is
+     * silently doing nothing is worse off than one with no block at all.
      */
-    val lockNotEnforcing: Boolean = false
+    val lockNotEnforcing: Boolean = false,
+    val offlineNotEnforcing: Boolean = false,
+    /** The packages a VPN consent would need to cover, if one is being asked for. */
+    val offlinePackages: List<String> = emptyList()
 ) {
     val isEmpty: Boolean get() = !isLoading && rows.isEmpty()
+    val anyNotEnforcing: Boolean get() = lockNotEnforcing || offlineNotEnforcing
 }
 
 /**
@@ -85,12 +90,18 @@ class AppsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AppsUiState())
     val uiState: StateFlow<AppsUiState> = _uiState.asStateFlow()
 
-    /** Call on resume: the accessibility switch can be revoked behind our back. */
+    /**
+     * Call on resume. Both switches live outside the app — accessibility in
+     * Android's settings, VPN consent in a system dialog that another VPN app
+     * can take over — so either can be gone without us hearing about it.
+     */
     fun refreshPermissions() {
         accessibilityOn = backgroundProtectionManager.isAccessibilityServiceEnabled()
+        vpnConsentGiven = vpnController.getVpnPermissionIntent() == null
     }
 
     private var accessibilityOn: Boolean = false
+    private var vpnConsentGiven: Boolean = true
 
     /** packageName -> label and icon. Held for the life of the ViewModel. */
     private val nameCache = mutableMapOf<String, com.beoffline.app.data.model.AppInfo>()
@@ -206,8 +217,9 @@ class AppsViewModel @Inject constructor(
         }
         val later = sorted.count { it.state.status == AppStatus.Later }
 
-        val lockEnforcingNow = sorted.any {
-            it.isLock && (it.state.status == AppStatus.BlockedNow || it.state.status == AppStatus.Later)
+        fun relying(onLock: Boolean) = sorted.any {
+            it.isLock == onLock &&
+                (it.state.status == AppStatus.BlockedNow || it.state.status == AppStatus.Later)
         }
 
         return AppsUiState(
@@ -215,7 +227,12 @@ class AppsViewModel @Inject constructor(
             headline = headlineFor(blockingNow),
             subline = sublineFor(blockingNow, later),
             isLoading = false,
-            lockNotEnforcing = lockEnforcingNow && !accessibilityOn
+            lockNotEnforcing = relying(onLock = true) && !accessibilityOn,
+            offlineNotEnforcing = relying(onLock = false) && !vpnConsentGiven,
+            // What consent, once given, should actually start holding — not
+            // every armed rule. An empty list still gets the consent dialog;
+            // the rule's own window alarm starts the tunnel when it is due.
+            offlinePackages = RuleScheduler.enforcedPackages(blockRules, now)
         )
     }
 
@@ -325,9 +342,9 @@ class AppsViewModel @Inject constructor(
                         )
                     }
                 }
-                val stillOn = blockRuleRepository.getActiveRulesOnce()
-                    .flatMap { it.blockedPackages }
-                    .distinct()
+                // Only what is genuinely enforcing right now: a scheduled rule
+                // that is armed for later must not be dragged into the tunnel.
+                val stillOn = RuleScheduler.enforcedPackages(blockRuleRepository.getActiveRulesOnce())
                 if (stillOn.isEmpty()) vpnController.stopVpn() else onNeedVpnPermission(stillOn)
             }
         }

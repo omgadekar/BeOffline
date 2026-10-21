@@ -72,6 +72,8 @@ fun AppsScreen(
     onAddApp: () -> Unit,
     onOpenSettings: () -> Unit,
     onRequestVpn: (List<String>) -> Unit,
+    /** Opens the accessibility disclosure, whose own button opens Android's settings. */
+    onFixLock: () -> Unit = {},
     viewModel: AppsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -133,9 +135,25 @@ fun AppsScreen(
             )
         }
 
-        if (uiState.lockNotEnforcing) {
+        if (uiState.anyNotEnforcing) {
             NotEnforcingBanner(
-                onFix = onOpenSettings,
+                // Accessibility is the more severe of the two, and the one that
+                // cannot be fixed from inside the app, so it leads.
+                body = if (uiState.lockNotEnforcing) {
+                    "BeOffline needs Android to tell it which app is open, and that " +
+                        "switch is off. Until you turn it back on, blocked apps will open."
+                } else {
+                    "BeOffline needs your permission to hold these apps offline, and it " +
+                        "does not have it. Until you allow it, they stay online."
+                },
+                // "Fix this" has to land ON the fix. It used to open the app's
+                // own Settings screen, which had no accessibility row at all,
+                // so the one failure the app promises to be loud about ended in
+                // a dead end.
+                onFix = {
+                    if (uiState.lockNotEnforcing) onFixLock()
+                    else onRequestVpn(uiState.offlinePackages)
+                },
                 modifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 14.dp)
             )
         }
@@ -197,7 +215,11 @@ fun AppsScreen(
  * a block that is quietly doing nothing.
  */
 @Composable
-private fun NotEnforcingBanner(onFix: () -> Unit, modifier: Modifier = Modifier) {
+private fun NotEnforcingBanner(
+    body: String,
+    onFix: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -208,15 +230,16 @@ private fun NotEnforcingBanner(onFix: () -> Unit, modifier: Modifier = Modifier)
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Text(
-            text = "These locks are not holding",
+            text = "These blocks are not holding",
             style = MaterialTheme.typography.titleSmall,
             color = StatusDanger
         )
         Spacer(Modifier.height(4.dp))
+        Text(text = body, style = MaterialTheme.typography.bodyMedium, color = StatusDanger)
+        Spacer(Modifier.height(8.dp))
         Text(
-            text = "BeOffline needs Android to tell it which app is open, and that " +
-                "switch is off. Until you turn it back on, locked apps will open.",
-            style = MaterialTheme.typography.bodyMedium,
+            text = "Fix this",
+            style = MaterialTheme.typography.labelLarge,
             color = StatusDanger
         )
     }

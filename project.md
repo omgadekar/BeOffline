@@ -162,8 +162,23 @@ Block rules are **never synced to the server** (privacy-minimal, v1 decision).
 
 ## 5. Backend
 
-`backend/` — ASP.NET Core 8, EF Core 8 + **Npgsql/PostgreSQL**, hosted on an existing **OCI VM**
-(Cloudflare-proxied subdomain). Monorepo with path-filtered CI (`.github/workflows`).
+`backend/` — ASP.NET Core 8, EF Core 8 + **Npgsql/PostgreSQL**, hosted on an existing **OCI VM**.
+
+**Where it is deployed** (so nobody has to go looking again):
+
+| | |
+|---|---|
+| Host | `beoffline-api.askthepolicy.com`, Cloudflare-proxied |
+| App directory | `/opt/beoffline-api/` |
+| Service user | `ubuntu`, systemd unit `beoffline-api` |
+| Production config | `/opt/beoffline-api/appsettings.Production.json` (not in git) |
+| Secrets | `/etc/beoffline/` — Firebase service account, Cloudflare origin cert + key |
+| nginx site | `/etc/nginx/sites-available/beoffline-api` |
+| Kestrel | `http://127.0.0.1:5080`, loopback only |
+
+Update path: `docs/BACKEND_DEPLOYMENT.md`. First-time setup (DNS, origin certificate, the two
+OCI firewall layers) is the
+[Deployment Runbook artifact](https://claude.ai/artifact/SzDtGGZG7MjpzpyBZvka1E).
 
 - Auth: **Firebase JWT bearer validation** (securetoken authority, no Admin SDK needed for
   validation); users auto-provisioned by middleware; **Firebase UID is the PK**.

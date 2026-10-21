@@ -12,6 +12,7 @@ import com.beoffline.app.data.repository.BlockRuleRepository
 import com.beoffline.app.data.repository.OpenBlockRuleRepository
 import com.beoffline.app.scheduler.OpenBlockScheduler
 import com.beoffline.app.scheduler.RuleScheduler
+import com.beoffline.app.vpn.VpnController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,7 +53,24 @@ data class BlockCreatorUiState(
     val createdAt: Long = System.currentTimeMillis(),
     /** True once the system switch behind "will not open" is actually on. */
     val accessibilityOn: Boolean = false,
+    val batteryOk: Boolean = false,
+    val notificationsOk: Boolean = false,
+    val vpnConsentOk: Boolean = false,
     val isEditing: Boolean = false,
+    /**
+     * The strictness this block was loaded as, or null for a new one. Changing
+     * strictness moves the row between two tables, and without remembering
+     * where it came from the old row cannot be cleaned up.
+     */
+    val loadedAsLock: Boolean? = null,
+    /** App names currently held by a different block, which saving will move here. */
+    val movingFromOtherBlocks: List<String> = emptyList(),
+    /**
+     * This row came out of a rule covering several apps — one made before a
+     * block meant one app. Saving splits it off into its own block and leaves
+     * the others where they are, so the list quietly migrates as people edit.
+     */
+    val splitFromLegacy: Boolean = false,
     val isLoading: Boolean = false
 ) {
     val isLock: Boolean get() = strictness == Strictness.Locked
@@ -78,10 +96,16 @@ data class BlockCreatorUiState(
     val whenPhrase: String
         get() = when (whenKind) {
             WhenKind.Always -> "until you turn it off"
-            WhenKind.Hours ->
+            // On a saved rule, no days means every day. Here it means the user
+            // has unpicked them all, and the summary saying "Every day" while
+            // the error above says "Pick at least one day" helps nobody.
+            WhenKind.Hours -> if (activeDays.isEmpty()) {
+                "on no days yet"
+            } else {
                 "${AppStateCopy.days(activeDays)}, " +
                     "${AppStateCopy.clock(startHour, startMinute)} to " +
                     AppStateCopy.clock(endHour, endMinute)
+            }
             WhenKind.Timer -> "for the next ${spokenTimer(timerMinutes)}"
         }
 
@@ -94,6 +118,72 @@ data class BlockCreatorUiState(
 
     /** Shown only when the chosen strictness needs a switch that is still off. */
     val needsAccessibility: Boolean get() = isLock && !accessibilityOn
+
+    /**
+     * The one permission without which this block cannot work at all, decided
+     * by how strict it is: an internet block needs VPN consent, a lock needs
+     * the accessibility switch. Someone who never wants a lock is never asked
+     * for accessibility.
+     */
+    val essential: List<PermissionNeed>
+        get() = listOf(if (isLock) PermissionNeed.Accessibility else PermissionNeed.VpnConsent)
+
+    /**
+     * Worth having, but the block still enforces without them: the battery
+     * exemption keeps Android from sleeping the engine, and the notification is
+     * how you can see a block is running. Asking is right; **requiring** them
+     * is not. Refusing to create a block because someone declined a battery
+     * exemption is both heavy-handed and more than the app actually needs.
+     */
+    val recommended: List<PermissionNeed>
+        get() = listOf(PermissionNeed.Battery, PermissionNeed.Notifications)
+
+    fun isGranted(need: PermissionNeed): Boolean = when (need) {
+        PermissionNeed.Battery -> batteryOk
+        PermissionNeed.Notifications -> notificationsOk
+        PermissionNeed.VpnConsent -> vpnConsentOk
+        PermissionNeed.Accessibility -> accessibilityOn
+    }
+
+    val missingEssential: List<PermissionNeed> get() = essential.filterNot(::isGranted)
+    val missingRecommended: List<PermissionNeed> get() = recommended.filterNot(::isGranted)
+    val missing: List<PermissionNeed> get() = missingEssential + missingRecommended
+
+    /** Valid AND able to actually enforce. Saving before this is a lie. */
+    val canStart: Boolean get() = isValid && missingEssential.isEmpty()
+}
+
+/**
+ * The switches a block needs. Three of the four are granted by a system dialog
+ * drawn over the app; only [Accessibility] forces a trip to Android's settings,
+ * which is why it is asked for last and only when it is genuinely needed.
+ */
+enum class PermissionNeed(
+    val title: String,
+    val why: String,
+    /** False when granting it means leaving the app. */
+    val inApp: Boolean
+) {
+    Battery(
+        title = "Keep running in the background",
+        why = "Android puts sleeping apps aside. Without this a block looks active and quietly stops.",
+        inApp = true
+    ),
+    Notifications(
+        title = "Show a quiet notice",
+        why = "The ongoing notice is how you can tell a block is actually running.",
+        inApp = true
+    ),
+    VpnConsent(
+        title = "Hold traffic for blocked apps",
+        why = "A local connection on your own phone. Nothing is read, and nothing leaves the device.",
+        inApp = true
+    ),
+    Accessibility(
+        title = "See which app is open",
+        why = "The only way to stop an app opening. It reads the name of the app in front, nothing else.",
+        inApp = false
+    )
 }
 
 internal fun spokenTimer(minutes: Int): String = when {
@@ -116,7 +206,8 @@ class BlockCreatorViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val blockRuleRepository: BlockRuleRepository,
     private val openBlockRuleRepository: OpenBlockRuleRepository,
-    private val backgroundProtectionManager: BackgroundProtectionManager
+    private val backgroundProtectionManager: BackgroundProtectionManager,
+    private val vpnController: VpnController
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BlockCreatorUiState())
@@ -151,14 +242,29 @@ class BlockCreatorViewModel @Inject constructor(
         }
     }
 
-    /** Call on resume: the accessibility switch lives outside the app. */
+    /**
+     * Call on resume and after any grant. Every one of these can change outside
+     * the app — a system dialog, Android's settings, or another VPN app taking
+     * the slot — so the only reliable answer is to look again.
+     */
     fun refreshPermissions() {
+        val status = backgroundProtectionManager.getStatus()
         _uiState.update {
-            it.copy(accessibilityOn = backgroundProtectionManager.isAccessibilityServiceEnabled())
+            it.copy(
+                accessibilityOn = status.accessibilityEnabled,
+                batteryOk = status.batteryOptimizationIgnored,
+                notificationsOk = status.notificationsEnabled,
+                vpnConsentOk = vpnController.getVpnPermissionIntent() == null
+            )
         }
     }
 
-    fun load(ruleId: Int?, startAsLock: Boolean) {
+    fun requestBattery() = backgroundProtectionManager.openBatteryOptimizationFlow()
+
+    /** Pre-33 there is no runtime prompt, so the settings page is the only route. */
+    fun openNotificationSettings() = backgroundProtectionManager.openNotificationSettings()
+
+    fun load(ruleId: Int?, startAsLock: Boolean, focusPackage: String? = null) {
         if (loaded) return
         loaded = true
         refreshPermissions()
@@ -186,7 +292,8 @@ class BlockCreatorViewModel @Inject constructor(
                     timerMinutes = rule.timerDurationMinutes,
                     isActive = rule.isActive,
                     timerStartedAt = rule.timerStartedAt,
-                    createdAt = rule.createdAt
+                    createdAt = rule.createdAt,
+                    focusPackage = focusPackage
                 )
             } else {
                 val rule = blockRuleRepository.getRuleById(ruleId) ?: return@launch
@@ -203,7 +310,8 @@ class BlockCreatorViewModel @Inject constructor(
                     timerMinutes = rule.timerDurationMinutes,
                     isActive = rule.isActive,
                     timerStartedAt = rule.timerStartedAt,
-                    createdAt = rule.createdAt
+                    createdAt = rule.createdAt,
+                    focusPackage = focusPackage
                 )
             }
         }
@@ -223,13 +331,19 @@ class BlockCreatorViewModel @Inject constructor(
         timerMinutes: Int?,
         isActive: Boolean,
         timerStartedAt: Long?,
-        createdAt: Long
+        createdAt: Long,
+        focusPackage: String?
     ) {
+        // A legacy rule can cover several apps. The row that was tapped names
+        // one of them, so scope to it and let the save split it out.
+        val split = focusPackage != null && packages.size > 1 && focusPackage in packages
+        val scoped = if (split) listOf(focusPackage!!) else packages
         _uiState.update {
             it.copy(
                 id = id,
                 strictness = strictness,
-                selectedPackages = packages,
+                selectedPackages = scoped,
+                splitFromLegacy = split,
                 whenKind = when (ruleType) {
                     RuleType.PERMANENT -> WhenKind.Always
                     RuleType.SCHEDULED -> WhenKind.Hours
@@ -239,17 +353,21 @@ class BlockCreatorViewModel @Inject constructor(
                 startMinute = startMinute ?: 0,
                 endHour = endHour ?: 17,
                 endMinute = endMinute ?: 0,
-                activeDays = activeDays ?: listOf(1, 2, 3, 4, 5),
+                // Belt and braces for blocks written before the converter kept
+                // null and empty apart: a rule that was never scheduled has no
+                // days, and the creator has to offer some or Save stays dead.
+                activeDays = activeDays?.takeIf { it.isNotEmpty() } ?: listOf(1, 2, 3, 4, 5),
                 timerMinutes = timerMinutes ?: 60,
                 isActive = isActive,
                 timerStartedAt = timerStartedAt,
                 createdAt = createdAt,
-                isEditing = true
+                isEditing = true,
+                loadedAsLock = strictness == Strictness.Locked
             )
         }
-        val infos = resolveAppInfos(packages)
+        val infos = resolveAppInfos(scoped)
         _uiState.update { current ->
-            if (current.selectedPackages == packages) current.copy(selectedAppInfos = infos) else current
+            if (current.selectedPackages == scoped) current.copy(selectedAppInfos = infos) else current
         }
     }
 
@@ -257,8 +375,14 @@ class BlockCreatorViewModel @Inject constructor(
         _uiState.update { it.copy(selectedPackages = packages) }
         viewModelScope.launch {
             val infos = resolveAppInfos(packages)
+            val state = _uiState.value
+            val moving = packagesHeldElsewhere(packages, selfId = state.id, selfIsLock = state.isLock)
             _uiState.update { current ->
-                if (current.selectedPackages == packages) current.copy(selectedAppInfos = infos) else current
+                if (current.selectedPackages == packages) {
+                    current.copy(selectedAppInfos = infos, movingFromOtherBlocks = moving)
+                } else {
+                    current
+                }
             }
         }
     }
@@ -298,9 +422,34 @@ class BlockCreatorViewModel @Inject constructor(
             val timerStartedAt =
                 if (state.whenKind == WhenKind.Timer) System.currentTimeMillis() else null
 
+            // Changing strictness on an existing block moves it between two
+            // tables. Writing the new row under the OLD row's id would update
+            // whichever unrelated rule happens to hold that id in the other
+            // table, and leave the original behind still enforcing. So the old
+            // row is deleted and the new one inserted fresh.
+            val movedTable = state.loadedAsLock != null && state.loadedAsLock != state.isLock
+            if (movedTable && !state.splitFromLegacy) {
+                val oldId = state.id
+                if (oldId != null) {
+                    if (state.loadedAsLock == true) {
+                        openBlockRuleRepository.getRuleById(oldId)?.let {
+                            OpenBlockScheduler.cancelRule(context, oldId)
+                            openBlockRuleRepository.deleteRule(it)
+                        }
+                    } else {
+                        blockRuleRepository.getRuleById(oldId)?.let {
+                            RuleScheduler.cancelRule(context, oldId)
+                            blockRuleRepository.deleteRule(it)
+                        }
+                        syncTunnelToRemainingRules()
+                    }
+                }
+            }
+            val writeId = if (movedTable || state.splitFromLegacy) null else state.id
+
             if (state.isLock) {
                 val rule = OpenBlockRule(
-                    id = state.id ?: 0,
+                    id = writeId ?: 0,
                     name = name,
                     blockedPackages = state.selectedPackages,
                     ruleType = state.whenKind.ruleType,
@@ -315,7 +464,7 @@ class BlockCreatorViewModel @Inject constructor(
                     disableEffectiveAt = null,
                     createdAt = state.createdAt
                 )
-                val saved = if (state.id != null) {
+                val saved = if (writeId != null) {
                     openBlockRuleRepository.updateRule(rule); rule
                 } else {
                     rule.copy(id = openBlockRuleRepository.saveRule(rule).toInt())
@@ -326,9 +475,11 @@ class BlockCreatorViewModel @Inject constructor(
                     WhenKind.Timer -> OpenBlockScheduler.scheduleTimerStop(context, saved)
                     WhenKind.Always -> Unit
                 }
+
+                claimPackages(state.selectedPackages, keepLockId = saved.id, keepBlockId = null)
             } else {
                 val rule = BlockRule(
-                    id = state.id ?: 0,
+                    id = writeId ?: 0,
                     name = name,
                     blockedPackages = state.selectedPackages,
                     ruleType = state.whenKind.ruleType,
@@ -342,7 +493,7 @@ class BlockCreatorViewModel @Inject constructor(
                     timerStartedAt = timerStartedAt,
                     createdAt = state.createdAt
                 )
-                val saved = if (state.id != null) {
+                val saved = if (writeId != null) {
                     blockRuleRepository.updateRule(rule); rule
                 } else {
                     rule.copy(id = blockRuleRepository.saveRule(rule).toInt())
@@ -354,11 +505,21 @@ class BlockCreatorViewModel @Inject constructor(
                     WhenKind.Always -> Unit
                 }
 
-                // The tunnel has to carry every offline package, not just this one.
-                val allOffline = blockRuleRepository.getActiveRulesOnce()
-                    .flatMap { it.blockedPackages }
-                    .distinct()
-                if (allOffline.isNotEmpty()) onNeedVpnPermission(allOffline)
+                claimPackages(state.selectedPackages, keepLockId = null, keepBlockId = saved.id)
+
+                // The tunnel has to carry every offline package, not just this
+                // one — and ONLY the ones enforcing right now. Editing a block
+                // from "always" to a 9-6 window at 7pm has to take its app back
+                // out of the tunnel, which means rebuilding it even when the
+                // answer is "nothing".
+                val allOffline = RuleScheduler.enforcedPackages(
+                    blockRuleRepository.getActiveRulesOnce()
+                )
+                if (allOffline.isEmpty()) {
+                    vpnController.stopVpn()
+                } else {
+                    onNeedVpnPermission(allOffline)
+                }
             }
             onSaved()
         }
@@ -379,9 +540,96 @@ class BlockCreatorViewModel @Inject constructor(
                     RuleScheduler.cancelRule(context, id)
                     blockRuleRepository.deleteRule(rule)
                 }
+                // Deleting the row is not enough: the tunnel was built from the
+                // old package list and keeps running until it is told otherwise,
+                // so the deleted app stayed offline and the "1 app offline"
+                // notification stayed up with it.
+                syncTunnelToRemainingRules()
             }
             onDeleted()
         }
+    }
+
+    /**
+     * Rebuilds the VPN from whatever internet blocks are still active, or stops
+     * it when none are. The open-block engine needs no equivalent — it reads the
+     * rules table on every foreground event, so a deleted row stops mattering
+     * immediately.
+     */
+    private suspend fun syncTunnelToRemainingRules() {
+        val stillBlocked = RuleScheduler.enforcedPackages(
+            blockRuleRepository.getActiveRulesOnce()
+        )
+        if (stillBlocked.isEmpty()) {
+            vpnController.stopVpn()
+        } else {
+            vpnController.startVpn(stillBlocked)
+        }
+    }
+
+
+    /**
+     * Gives [packages] to one block and takes them from every other.
+     *
+     * The home screen is a list of apps, one row each, and a row can only show
+     * one state — so an app has to belong to exactly one block. Without this,
+     * adding YouTube to a second block left it in the first as well: the list
+     * still showed one YouTube row, but removing it took two trips, one through
+     * each block, with no way to tell from the screen that the second existed.
+     *
+     * A block stripped of its last app is deleted rather than left as an empty
+     * row that blocks nothing.
+     */
+    private suspend fun claimPackages(packages: List<String>, keepLockId: Int?, keepBlockId: Int?) {
+        val claimed = packages.toSet()
+
+        openBlockRuleRepository.getAllRulesOnce().forEach { rule ->
+            if (rule.id == keepLockId) return@forEach
+            val remaining = rule.blockedPackages.filterNot { it in claimed }
+            if (remaining.size == rule.blockedPackages.size) return@forEach
+            if (remaining.isEmpty()) {
+                OpenBlockScheduler.cancelRule(context, rule.id)
+                openBlockRuleRepository.deleteRule(rule)
+            } else {
+                openBlockRuleRepository.updateRule(rule.copy(blockedPackages = remaining))
+            }
+        }
+
+        var tunnelChanged = false
+        blockRuleRepository.getAllRulesOnce().forEach { rule ->
+            if (rule.id == keepBlockId) return@forEach
+            val remaining = rule.blockedPackages.filterNot { it in claimed }
+            if (remaining.size == rule.blockedPackages.size) return@forEach
+            tunnelChanged = true
+            if (remaining.isEmpty()) {
+                RuleScheduler.cancelRule(context, rule.id)
+                blockRuleRepository.deleteRule(rule)
+            } else {
+                blockRuleRepository.updateRule(rule.copy(blockedPackages = remaining))
+            }
+        }
+        // Only needed when a lock took packages off an internet block; the
+        // internet-block branch rebuilds the tunnel itself straight after.
+        if (tunnelChanged && keepBlockId == null) syncTunnelToRemainingRules()
+    }
+
+    /**
+     * App names already covered by a different block, so the creator can say
+     * that saving will move them rather than doing it silently.
+     */
+    private suspend fun packagesHeldElsewhere(packages: List<String>, selfId: Int?, selfIsLock: Boolean): List<String> {
+        val wanted = packages.toSet()
+        val held = mutableSetOf<String>()
+        openBlockRuleRepository.getAllRulesOnce().forEach { rule ->
+            if (selfIsLock && rule.id == selfId) return@forEach
+            held += rule.blockedPackages.filter { it in wanted }
+        }
+        blockRuleRepository.getAllRulesOnce().forEach { rule ->
+            if (!selfIsLock && rule.id == selfId) return@forEach
+            held += rule.blockedPackages.filter { it in wanted }
+        }
+        if (held.isEmpty()) return emptyList()
+        return resolveAppInfos(held.toList()).map { it.appName }
     }
 
     /**
@@ -393,8 +641,7 @@ class BlockCreatorViewModel @Inject constructor(
         return when {
             names.isEmpty() -> "Block"
             names.size == 1 -> names.first()
-            names.size == 2 -> "${names[0]} and ${names[1]}"
-            else -> "${names[0]} and ${names.size - 1} more"
+            else -> names.first()
         }
     }
 

@@ -69,7 +69,9 @@ class MainActivity : ComponentActivity() {
         // A notification deep-link always wins: someone tapping "Priya approved
         // it" should land on that, not on a welcome flow.
         val prefs = getSharedPreferences(UI_PREFS, MODE_PRIVATE)
-        val startOnWelcome = navRoute.value == null && !prefs.getBoolean(KEY_WELCOME_DONE, false)
+        val startOnWelcome = navRoute.value == null &&
+            !prefs.getBoolean(KEY_WELCOME_DONE, false) &&
+            !isExistingInstall(prefs)
         if (startOnWelcome) prefs.edit().putBoolean(KEY_WELCOME_DONE, true).apply()
 
         setContent {
@@ -86,8 +88,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * True when this install predates the rebuilt UI.
+     *
+     * [KEY_WELCOME_DONE] is a new key, so on its own it is false for everyone
+     * updating from the published version — which would have dropped every
+     * existing user into "What do you want to put down?" as though they had
+     * never used the app, with the blocks they already rely on hidden behind
+     * it. Two signals say otherwise: the database file only exists once the old
+     * app has run, and the old welcome dialog wrote its own key into this same
+     * preferences file.
+     */
+    private fun isExistingInstall(prefs: android.content.SharedPreferences): Boolean =
+        getDatabasePath(DB_NAME).exists() || prefs.contains(KEY_OLD_WELCOME_SEEN)
+
     private companion object {
         const val UI_PREFS = "dashboard_ui"
+        const val DB_NAME = "beoffline.db"
+
+        /** Written by the dashboard's welcome dialog in every version up to 1.0.8. */
+        const val KEY_OLD_WELCOME_SEEN = "welcome_dialog_seen"
 
         /**
          * Set the moment the welcome flow is SHOWN, not when it is completed:

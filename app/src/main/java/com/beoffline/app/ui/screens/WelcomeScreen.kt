@@ -1,5 +1,9 @@
 package com.beoffline.app.ui.screens
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -54,6 +60,9 @@ import com.beoffline.app.ui.theme.Brand600
 import com.beoffline.app.ui.theme.Brand700
 import com.beoffline.app.ui.theme.Brand800
 import com.beoffline.app.ui.theme.Brand900
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.beoffline.app.ui.theme.StatusDanger
 import com.beoffline.app.ui.theme.TextDisabled
 import com.beoffline.app.ui.theme.TextPrimary
 import com.beoffline.app.ui.theme.TextSecondary
@@ -72,19 +81,55 @@ private enum class WelcomeStep { Pick, When, Permission }
 fun WelcomeScreen(
     onFinished: () -> Unit,
     onShowDisclosure: () -> Unit,
+    onRequestVpn: (List<String>) -> Unit,
     viewModel: BlockCreatorViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
     val suggestions by viewModel.suggestions.collectAsState()
     var step by remember { mutableStateOf(WelcomeStep.Pick) }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // The ongoing notification is how a person knows a block is running at all,
+    // so ask for it once the first block exists rather than on a cold launch.
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { onFinished() }
+
+    fun finish() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            onFinished()
+        }
+    }
+
+    /**
+     * Saves and leaves. Every exit from this flow goes through here, because
+     * every exit has to hand the VPN consent callback to [BlockCreatorViewModel.save].
+     * An earlier version passed an empty lambda, so finishing the flow with the
+     * "nothing loads" option created a block and never asked for consent — the
+     * app then sat there looking armed and blocking nothing.
+     */
+    fun saveAndFinish() {
+        viewModel.save(onNeedVpnPermission = onRequestVpn, onSaved = ::finish)
+    }
+
     LaunchedEffect(Unit) {
         viewModel.load(ruleId = null, startAsLock = true)
         viewModel.loadSuggestions()
     }
-    LaunchedEffect(step) {
-        if (step == WelcomeStep.Permission) viewModel.refreshPermissions()
+
+    // The accessibility switch is flipped outside the app, so the only way to
+    // know it happened is to look again when we come back.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshPermissions()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+
 
     Column(
         modifier = Modifier
@@ -152,12 +197,54 @@ fun WelcomeScreen(
                     onPickStrictness = viewModel::setStrictness
                 )
 
-                WelcomeStep.Permission -> PermissionStep(onShowDisclosure = onShowDisclosure)
+                WelcomeStep.Permission -> {
+                    PermissionStep(onShowDisclosure = onShowDisclosure, isLock = state.isLock)
+                    Spacer(Modifier.height(22.dp))
+                    PermissionGate(
+                        state = state,
+                        onRefresh = viewModel::refreshPermissions,
+                        onRequestBattery = viewModel::requestBattery,
+                        onOpenNotificationSettings = viewModel::openNotificationSettings,
+                        onRequestVpn = onRequestVpn,
+                        onShowAccessibilityDisclosure = onShowDisclosure,
+                        onReady = ::saveAndFinish
+                    )
+                    // Someone who will not leave the app for the accessibility
+                    // switch should not be stuck here: the simpler block needs
+                    // nothing outside this screen.
+                    if (state.isLock) {
+                        Spacer(Modifier.height(18.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(BoShape.Control)
+                                .clickable(role = Role.Button) {
+                                    viewModel.setStrictness(Strictness.Offline)
+                                }
+                                .padding(vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Keep it empty instead",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = AccentPrimary
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "It still opens, but nothing loads. Nothing to set up outside here.",
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
             }
             Spacer(Modifier.height(28.dp))
         }
 
-        if (step != WelcomeStep.Pick) {
+        // The gate carries its own primary button, so the bottom bar belongs to
+        // the "when" step alone.
+        if (step == WelcomeStep.When) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -165,58 +252,25 @@ fun WelcomeScreen(
                     .padding(horizontal = 24.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (step == WelcomeStep.When) {
-                    Text(
-                        text = state.summary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    BoPrimaryButton(
-                        text = if (state.needsAccessibility) "Next" else "Start now",
-                        enabled = state.isValid,
-                        onClick = {
-                            if (state.needsAccessibility) {
-                                step = WelcomeStep.Permission
-                            } else {
-                                viewModel.save(onNeedVpnPermission = {}, onSaved = onFinished)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    BoPrimaryButton(
-                        text = "Take me to the setting",
-                        onClick = {
-                            viewModel.openAccessibilitySettings()
-                            viewModel.save(onNeedVpnPermission = {}, onSaved = onFinished)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(BoShape.Control)
-                            .clickable(role = Role.Button) {
-                                viewModel.setStrictness(Strictness.Offline)
-                                viewModel.save(onNeedVpnPermission = {}, onSaved = onFinished)
-                            }
-                            .padding(vertical = 10.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Skip - keep it empty instead",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = AccentPrimary
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = "Works straight away, nothing to grant",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
+                Text(
+                    text = state.summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(10.dp))
+                BoPrimaryButton(
+                    text = if (state.canStart) "Start now" else "Next",
+                    enabled = state.isValid,
+                    onClick = {
+                        if (state.canStart) {
+                            saveAndFinish()
+                        } else {
+                            viewModel.refreshPermissions()
+                            step = WelcomeStep.Permission
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -337,7 +391,7 @@ private fun WhenStep(
 }
 
 @Composable
-private fun PermissionStep(onShowDisclosure: () -> Unit) {
+private fun PermissionStep(onShowDisclosure: () -> Unit, isLock: Boolean) {
     Spacer(Modifier.height(18.dp))
     Text(
         text = "One permission,\nthen you are set",
@@ -345,8 +399,13 @@ private fun PermissionStep(onShowDisclosure: () -> Unit) {
     )
     Spacer(Modifier.height(13.dp))
     Text(
-        text = "To stop an app opening, Android has to tell BeOffline which app just " +
-            "came to the front. That switch lives in Android's own settings.",
+        text = if (isLock) {
+            "To stop an app opening, Android has to tell BeOffline which app just came " +
+                "to the front. That one switch lives in Android's own settings; the rest " +
+                "are right here."
+        } else {
+            "Nothing here leaves the app - each one is a system prompt over this screen."
+        },
         style = MaterialTheme.typography.bodyLarge,
         color = TextSecondary
     )

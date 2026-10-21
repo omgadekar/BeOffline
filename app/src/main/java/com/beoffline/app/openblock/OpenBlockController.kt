@@ -70,8 +70,19 @@ class OpenBlockController @Inject constructor(
             if (!rule.isActive) return false
             // Pending-disable cooldown: still enforcing until it elapses, then off.
             if (rule.disableEffectiveAt != null && rule.disableEffectiveAt <= nowMillis) return false
-            return rule.ruleType != RuleType.SCHEDULED ||
-                RuleScheduler.isWithinScheduledWindow(rule, nowMillis)
+            return when (rule.ruleType) {
+                RuleType.PERMANENT -> true
+                RuleType.SCHEDULED -> RuleScheduler.isWithinScheduledWindow(rule, nowMillis)
+                // A timer that has run out is off whether or not its stop alarm
+                // arrived. Doze can swallow that alarm for hours, and a lock
+                // that outlives its own clock is the worst kind of bug: the
+                // list says "paused" while the app still refuses to open.
+                RuleType.TIMER -> {
+                    val startedAt = rule.timerStartedAt ?: return false
+                    val minutes = rule.timerDurationMinutes ?: return false
+                    nowMillis < startedAt + minutes * 60_000L
+                }
+            }
         }
 
         /**

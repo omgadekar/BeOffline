@@ -8,6 +8,7 @@ import android.util.LruCache
 import com.beoffline.app.data.local.BlockRuleDao
 import com.beoffline.app.data.model.AppInfo
 import com.beoffline.app.data.model.BlockRule
+import com.beoffline.app.scheduler.RuleScheduler
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -117,8 +118,15 @@ class BlockRuleRepository @Inject constructor(
     }
 
     /**
-     * Returns all currently active rule packages as a flat list.
-     * Used to reconstruct the VPN allow list after a device reboot.
+     * The packages the tunnel should be holding RIGHT NOW, as a flat list.
+     * Used to reconstruct the VPN allow list after a reboot, a service kill or
+     * a health check.
+     *
+     * "Active" is not the same question: a scheduled rule stays armed outside
+     * its window so the list can say when it starts, and rebuilding the tunnel
+     * from armed rules kept apps offline at 7pm for a block set to 9-6. The
+     * window (and a timer's own clock) decide what actually goes in the tunnel
+     * — see [RuleScheduler.isEnforcingNow].
      *
      * IMPORTANT: Uses .first() — NOT .collect() — because getActiveRules()
      * returns a Room Flow that never completes, and calling collect() inside
@@ -126,7 +134,7 @@ class BlockRuleRepository @Inject constructor(
      */
     suspend fun getActiveBlockedPackages(): List<String> {
         val rules = dao.getActiveRules().first()   // ← was .collect{} — caused ANR
-        return rules.flatMap { it.blockedPackages }.distinct()
+        return RuleScheduler.enforcedPackages(rules)
     }
 
     @Suppress("DEPRECATION")
