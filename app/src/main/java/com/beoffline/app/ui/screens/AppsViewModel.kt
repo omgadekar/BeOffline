@@ -229,9 +229,10 @@ class AppsViewModel @Inject constructor(
             isLoading = false,
             lockNotEnforcing = relying(onLock = true) && !accessibilityOn,
             offlineNotEnforcing = relying(onLock = false) && !vpnConsentGiven,
-            offlinePackages = blockRules.filter { it.isActive }
-                .flatMap { it.blockedPackages }
-                .distinct()
+            // What consent, once given, should actually start holding — not
+            // every armed rule. An empty list still gets the consent dialog;
+            // the rule's own window alarm starts the tunnel when it is due.
+            offlinePackages = RuleScheduler.enforcedPackages(blockRules, now)
         )
     }
 
@@ -341,9 +342,9 @@ class AppsViewModel @Inject constructor(
                         )
                     }
                 }
-                val stillOn = blockRuleRepository.getActiveRulesOnce()
-                    .flatMap { it.blockedPackages }
-                    .distinct()
+                // Only what is genuinely enforcing right now: a scheduled rule
+                // that is armed for later must not be dragged into the tunnel.
+                val stillOn = RuleScheduler.enforcedPackages(blockRuleRepository.getActiveRulesOnce())
                 if (stillOn.isEmpty()) vpnController.stopVpn() else onNeedVpnPermission(stillOn)
             }
         }

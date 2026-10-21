@@ -121,12 +121,8 @@ class DashboardViewModel @Inject constructor(
                 )
             }
 
-            val activePackages = repository
-                .getActiveRulesOnce()
-                .flatMap { it.blockedPackages }
-                .distinct()
-
-            onNeedVpnPermission(activePackages)
+            val enforced = RuleScheduler.enforcedPackages(repository.getActiveRulesOnce())
+            if (enforced.isNotEmpty()) onNeedVpnPermission(enforced)
         }
     }
 
@@ -225,11 +221,11 @@ class DashboardViewModel @Inject constructor(
             RuleScheduler.cancelTimerStop(context, rule.id)
         }
 
-        val remaining = repository.getActiveRulesOnce()
+        val remaining = RuleScheduler.enforcedPackages(repository.getActiveRulesOnce())
         if (remaining.isEmpty()) {
             vpnController.stopVpn()
         } else {
-            vpnController.startVpn(remaining.flatMap { it.blockedPackages }.distinct())
+            vpnController.startVpn(remaining)
         }
     }
 

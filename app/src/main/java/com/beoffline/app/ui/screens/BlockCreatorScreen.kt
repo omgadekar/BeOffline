@@ -119,7 +119,22 @@ fun BlockCreatorScreen(
                     }
                 )
             },
-            confirmButton = {},
+            // An edit is never thrown away. Refusing to save a change to a
+            // block that already exists traps someone who revoked the
+            // accessibility switch: they could not re-grant it from here and
+            // could not change the block either, so the only way out was
+            // clearing the app's data. The home screen goes on saying, loudly,
+            // that the block is not holding.
+            confirmButton = {
+                if (state.isEditing && !state.canStart) {
+                    TextButton(onClick = {
+                        showGate = false
+                        viewModel.save(onNeedVpnPermission = onRequestVpn, onSaved = onBack)
+                    }) {
+                        Text("Save without it", color = AccentPrimary)
+                    }
+                }
+            },
             dismissButton = {
                 TextButton(onClick = { showGate = false }) {
                     Text("Not now", color = TextSecondary)

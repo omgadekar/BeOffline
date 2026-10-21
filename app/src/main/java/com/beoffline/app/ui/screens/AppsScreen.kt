@@ -72,6 +72,8 @@ fun AppsScreen(
     onAddApp: () -> Unit,
     onOpenSettings: () -> Unit,
     onRequestVpn: (List<String>) -> Unit,
+    /** Opens the accessibility disclosure, whose own button opens Android's settings. */
+    onFixLock: () -> Unit = {},
     viewModel: AppsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -144,8 +146,12 @@ fun AppsScreen(
                     "BeOffline needs your permission to hold these apps offline, and it " +
                         "does not have it. Until you allow it, they stay online."
                 },
+                // "Fix this" has to land ON the fix. It used to open the app's
+                // own Settings screen, which had no accessibility row at all,
+                // so the one failure the app promises to be loud about ended in
+                // a dead end.
                 onFix = {
-                    if (uiState.lockNotEnforcing) onOpenSettings()
+                    if (uiState.lockNotEnforcing) onFixLock()
                     else onRequestVpn(uiState.offlinePackages)
                 },
                 modifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 14.dp)

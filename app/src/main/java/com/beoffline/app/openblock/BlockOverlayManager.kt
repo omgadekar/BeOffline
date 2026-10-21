@@ -1,18 +1,27 @@
 package com.beoffline.app.openblock
 
 import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.PixelFormat
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -24,16 +33,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -70,6 +84,8 @@ import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * BlockOverlayManager — the full-screen "app blocked" surface, hosting the solo
@@ -104,16 +120,74 @@ class BlockOverlayManager @Inject constructor(
     private var lifecycleHost: OverlayLifecycleHost? = null
     private var dismissJob: Job? = null
 
+    /**
+     * An accessibility overlay outranks the keyguard: it keeps drawing over the
+     * lock screen and the always-on display, so locking the phone with the
+     * block screen up left "Instagram is locked" burned across the lock screen
+     * until something else tore it down. The screen going off is the end of the
+     * moment this window exists for, so that is where it goes.
+     */
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != Intent.ACTION_SCREEN_OFF) return
+            mainScope.launch { hideNow() }
+        }
+    }
+    private var screenOffRegistered = false
+
     fun attach(service: AccessibilityService) {
         serviceRef = WeakReference(service)
+        registerScreenOffReceiver()
     }
 
     fun detach() {
         mainScope.launch { hideNow() }
+        unregisterScreenOffReceiver()
         serviceRef = null
     }
 
+    private fun registerScreenOffReceiver() {
+        if (screenOffRegistered) return
+        try {
+            ContextCompat.registerReceiver(
+                appContext,
+                screenOffReceiver,
+                IntentFilter(Intent.ACTION_SCREEN_OFF),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            screenOffRegistered = true
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not watch for the screen turning off", e)
+        }
+    }
+
+    private fun unregisterScreenOffReceiver() {
+        if (!screenOffRegistered) return
+        try {
+            appContext.unregisterReceiver(screenOffReceiver)
+        } catch (e: Exception) {
+            Log.w(TAG, "Screen-off receiver was already gone", e)
+        }
+        screenOffRegistered = false
+    }
+
+    /**
+     * Nothing to say to a dark or locked screen. A blocked app can come
+     * forward with the phone asleep or on the keyguard — a notification tap, a
+     * widget, an OEM launcher waking up — and the send-home has already done
+     * the enforcing by the time we get here. Raising a window now only means
+     * finding it over the lock screen later.
+     */
+    private fun canShowOverlayNow(): Boolean {
+        val power = appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        if (power != null && !power.isInteractive) return false
+        val keyguard = appContext.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        if (keyguard != null && keyguard.isKeyguardLocked) return false
+        return true
+    }
+
     fun showBlockScreen(packageName: String, untilText: String?, rule: OpenBlockRule? = null) {
+        if (!canShowOverlayNow()) return
         mainScope.launch {
             val appName = resolveAppName(packageName)
             val partnerName = try {
@@ -207,26 +281,35 @@ class BlockOverlayManager @Inject constructor(
 
         val content: @Composable () -> Unit = {
             BeOfflineTheme {
-                BlockOverlayRoot(
-                    appName = appName,
-                    packageName = packageName,
-                    untilText = untilText,
-                    rule = rule,
-                    partnerName = partnerName,
-                    groupName = group?.name,
-                    challengeController = challengeController,
-                    askPartner = { accountabilityRepository.enqueueUnlockRequest(packageName, appName) },
-                    askGroup = {
-                        group?.let {
-                            accountabilityRepository.enqueueUnlockRequest(
-                                packageName, appName, groupId = it.groupId
-                            )
-                        }
-                    },
-                    onChallengeStarted = ::cancelAutoDismiss,
-                    onNeedsKeyboard = ::setFocusable,
-                    onDismiss = { mainScope.launch { hideNow() } }
-                )
+                // Keyed on the app: when a second blocked app is opened while
+                // this window is still up, the content is swapped in place, and
+                // without the key it would keep whatever stage the last one was
+                // on — someone three answers into a challenge for Instagram
+                // would find it relabelled Reddit and still counting.
+                key(packageName) {
+                    BlockOverlayRoot(
+                        appName = appName,
+                        packageName = packageName,
+                        untilText = untilText,
+                        rule = rule,
+                        partnerName = partnerName,
+                        groupName = group?.name,
+                        challengeController = challengeController,
+                        askPartner = {
+                            accountabilityRepository.enqueueUnlockRequest(packageName, appName)
+                        },
+                        askGroup = {
+                            group?.let {
+                                accountabilityRepository.enqueueUnlockRequest(
+                                    packageName, appName, groupId = it.groupId
+                                )
+                            }
+                        },
+                        onChallengeStarted = ::cancelAutoDismiss,
+                        onNeedsKeyboard = ::setFocusable,
+                        onDismiss = { mainScope.launch { hideNow() } }
+                    )
+                }
             }
         }
 
@@ -255,6 +338,9 @@ class BlockOverlayManager @Inject constructor(
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
 
+        // Idempotent, and belt-and-braces: the overlay can also come up through
+        // the draw-over-apps fallback, where attach() never ran.
+        registerScreenOffReceiver()
         windowManager.addView(view, params)
         overlayView = view
         overlayWindowManager = windowManager
@@ -335,8 +421,46 @@ private fun BlockOverlayRoot(
     var stage by remember { mutableStateOf<OverlayStage>(OverlayStage.Blocked) }
     val scope = rememberCoroutineScope()
 
+    // A full-screen accessibility overlay eats the system's own swipe-up, so
+    // the only way off this screen was the Close link. The window carries the
+    // gesture itself instead: drag it away in either direction and it goes.
+    // Not during a challenge — a stray drag should not throw away a set you
+    // are three answers into. "Never mind" is the way out of that one.
+    val swipeable = stage !is OverlayStage.Challenge
+    val slide = remember { Animatable(0f) }
+    val dismissDistance = with(LocalDensity.current) { 96.dp.toPx() }
+
+    LaunchedEffect(swipeable) { if (!swipeable) slide.snapTo(0f) }
+
     Box(
-        modifier = Modifier.fillMaxSize().background(BrandVoid),
+        modifier = Modifier
+            .fillMaxSize()
+            .offset { IntOffset(0, slide.value.roundToInt()) }
+            .background(BrandVoid)
+            .then(
+                if (!swipeable) {
+                    Modifier
+                } else {
+                    Modifier.pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onVerticalDrag = { change, dragAmount ->
+                                change.consume()
+                                scope.launch { slide.snapTo(slide.value + dragAmount) }
+                            },
+                            onDragEnd = {
+                                scope.launch {
+                                    if (abs(slide.value) > dismissDistance) {
+                                        onDismiss()
+                                    } else {
+                                        slide.animateTo(0f, spring())
+                                    }
+                                }
+                            },
+                            onDragCancel = { scope.launch { slide.animateTo(0f, spring()) } }
+                        )
+                    }
+                }
+            ),
         contentAlignment = Alignment.Center
     ) {
         when (val current = stage) {
@@ -502,6 +626,12 @@ private fun BlockedStage(
                 .padding(top = 6.dp)
                 .clickable(role = Role.Button, onClick = onDismiss)
                 .padding(8.dp)
+        )
+        Text(
+            text = "or swipe this screen away",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextDisabled,
+            textAlign = TextAlign.Center
         )
     }
 }

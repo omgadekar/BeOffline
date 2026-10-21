@@ -85,6 +85,44 @@ object RuleScheduler {
     }
 
     /**
+     * Is this internet block actually holding traffic right now?
+     *
+     * `isActive` only means ARMED. A scheduled rule stays armed around the
+     * clock so the list can say "starts at 9", and a timer stays armed until
+     * something stops it — so neither flag alone says whether the tunnel
+     * should be carrying the rule's apps. Everything that rebuilds the tunnel
+     * has to ask this instead, or a block set for 9-6 goes on blocking at 7pm
+     * and a timer whose stop alarm was dropped never lifts at all.
+     *
+     * Mirrors [com.beoffline.app.openblock.OpenBlockController.isEnforcingNow]
+     * for the other engine.
+     */
+    fun isEnforcingNow(rule: BlockRule, nowMillis: Long = System.currentTimeMillis()): Boolean {
+        if (!rule.isActive) return false
+        return when (rule.ruleType) {
+            RuleType.PERMANENT -> true
+            RuleType.SCHEDULED -> isWithinScheduledWindow(rule, nowMillis)
+            RuleType.TIMER -> {
+                val startedAt = rule.timerStartedAt ?: return false
+                val minutes = rule.timerDurationMinutes ?: return false
+                nowMillis < startedAt + minutes * 60_000L
+            }
+        }
+    }
+
+    /**
+     * The packages the VPN tunnel should be holding at [nowMillis] — the one
+     * answer every rebuild path should be asking for.
+     */
+    fun enforcedPackages(
+        rules: List<BlockRule>,
+        nowMillis: Long = System.currentTimeMillis()
+    ): List<String> = rules
+        .filter { isEnforcingNow(it, nowMillis) }
+        .flatMap { it.blockedPackages }
+        .distinct()
+
+    /**
      * Window-evaluation is shared by both restriction engines: any rule type
      * implementing [ScheduledWindow] (internet-block or open-block) gets the
      * same midnight-crossing-aware "inside the window right now" check.
@@ -381,8 +419,8 @@ class StartRuleWorker @AssistedInject constructor(
 
         val rule = repository.getRuleById(ruleId) ?: return Result.failure()
         repository.setRuleActive(ruleId, true)
-        val activeRules = repository.getActiveRulesOnce()
-        vpnController.startVpn(activeRules.flatMap { it.blockedPackages }.distinct())
+        val enforced = RuleScheduler.enforcedPackages(repository.getActiveRulesOnce())
+        if (enforced.isNotEmpty()) vpnController.startVpn(enforced)
 
         val stopDelay = calculateStopDelay(rule)
         if (stopDelay > 0) {
@@ -436,13 +474,13 @@ class StopRuleWorker @AssistedInject constructor(
         repository.setRuleActive(ruleId, false)
         repository.setTimerStartedAt(ruleId, null)
 
-        val activeRules = repository.getActiveRulesOnce()
-        if (activeRules.isEmpty()) {
+        val enforced = RuleScheduler.enforcedPackages(repository.getActiveRulesOnce())
+        if (enforced.isEmpty()) {
             VpnResilienceScheduler.cancelHealthMonitor(applicationContext)
             vpnController.stopVpn()
         } else {
             VpnResilienceScheduler.ensureHealthMonitor(applicationContext)
-            vpnController.startVpn(activeRules.flatMap { it.blockedPackages }.distinct())
+            vpnController.startVpn(enforced)
         }
 
         return Result.success()

@@ -167,6 +167,7 @@ fun BeOfflineNavGraph(
                 },
                 onAddApp = { navController.navigate(Screen.BlockCreator.createRoute()) },
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                onShowDisclosure = { navController.navigate(Screen.OpenBlockDisclosure.route) },
                 onOpenChat = { groupId -> navController.navigate(Screen.GroupChat.createRoute(groupId)) }
             )
         }

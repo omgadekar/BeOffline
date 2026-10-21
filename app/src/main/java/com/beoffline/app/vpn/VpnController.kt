@@ -66,19 +66,36 @@ class VpnController @Inject constructor(
                 ArrayList(blockedPackages)
             )
         }
-        context.startForegroundService(intent)
+        // Android refuses some background service starts outright. A rule that
+        // cannot be armed this second is a missed block; a crash here takes the
+        // receiver or worker down with it and misses every later one too.
+        try {
+            context.startForegroundService(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not start the tunnel from the background.", e)
+        }
     }
 
     /**
-     * Stops the running VPN tunnel.
+     * Takes the tunnel down and leaves every rule exactly as it is.
+     *
+     * Deliberately NOT the notification's Stop action: that one is the user
+     * switching their blocks off, and it deactivates the rules too. Anything
+     * internal — a window closing, a block deleted, a stale tunnel reaped —
+     * wants this one.
      */
     fun stopVpn() {
         Log.d(TAG, "Stopping VPN.")
         VpnResilienceScheduler.cancelRecovery(context)
         VpnResilienceScheduler.cancelHealthMonitor(context)
         val intent = Intent(context, BeOfflineVpnService::class.java).apply {
-            action = BeOfflineVpnService.ACTION_STOP
+            action = BeOfflineVpnService.ACTION_TEARDOWN
         }
-        context.startService(intent)
+        try {
+            context.startService(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not deliver the teardown; stopping the service directly.", e)
+            context.stopService(Intent(context, BeOfflineVpnService::class.java))
+        }
     }
 }
