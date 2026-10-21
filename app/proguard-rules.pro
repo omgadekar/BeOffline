@@ -5,9 +5,13 @@
 # dashboard, which has to stay above 25%.
 #
 # Libraries that ship their own consumer rules are deliberately NOT repeated
-# here: Hilt/Dagger, Room, Retrofit, OkHttp, Gson, WorkManager and Firebase all
-# carry rules inside their artifacts, and duplicating them by hand is how a
-# stale `-keep` survives a library upgrade.
+# here: Hilt/Dagger, Room, Retrofit, OkHttp, WorkManager and Firebase all carry
+# rules inside their artifacts, and duplicating them by hand is how a stale
+# `-keep` survives a library upgrade.
+#
+# Gson is the exception, and it cost a crash to find out. Gson only began
+# embedding META-INF/proguard rules in 2.11.0; the 2.10.1 jar on this
+# classpath has none at all, so nothing kept TypeToken and R8 renamed it.
 #
 # Components declared in AndroidManifest.xml -- the VPN service, the open-block
 # accessibility service, the FCM service, the receivers -- are kept by the
@@ -31,7 +35,17 @@
 
 # Converters resolves List<String> / List<Int> through anonymous TypeToken
 # subclasses, which are useless without their generic signature.
+#
+# Keeping the subclasses is not enough on its own. TypeToken reads its own
+# type argument back out of the subclass's generic supertype, so the base
+# class has to survive intact too — with 2.10.1 bringing no rules of its own,
+# R8 renamed it to t4.a, the signature went with it, and the first Room read
+# after launch threw "TypeToken must be created with a type argument". That is
+# every rule the app has ever stored, on the first screen, in release only.
+#
+# These three lines are Gson's own rules, the ones 2.11.0 started shipping.
 -keepattributes Signature
+-keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
 
 # -- Room --------------------------------------------------------------------
