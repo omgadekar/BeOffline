@@ -77,7 +77,25 @@ class BeOfflineVpnService : VpnService() {
 
         // Intent actions to control the service
         const val ACTION_START = "com.beoffline.vpn.START"
+
+        /**
+         * The user pressed Stop on the notification. This switches every
+         * internet block OFF as well as taking the tunnel down — it is a
+         * decision about the rules, not just about the tunnel.
+         */
         const val ACTION_STOP  = "com.beoffline.vpn.STOP"
+
+        /**
+         * Take the tunnel down and leave the rules alone.
+         *
+         * [ACTION_STOP] used to be the only way to stop the service, so every
+         * internal "there is nothing to block right now" — a window closing, a
+         * block deleted, the health worker reaping a stale tunnel — also
+         * switched off every rule it found active, including ones armed for a
+         * window that had not come round yet. Those rules then read as paused
+         * and never came back until the user noticed.
+         */
+        const val ACTION_TEARDOWN = "com.beoffline.vpn.TEARDOWN"
         const val EXTRA_BLOCKED_PACKAGES = "blocked_packages"
     }
 
@@ -137,6 +155,14 @@ class BeOfflineVpnService : VpnService() {
                         stopSelf()
                     }
                 }
+                START_NOT_STICKY
+            }
+            ACTION_TEARDOWN -> {
+                stopRequested = true
+                blockedTrafficAlertManager.markSessionStopped()
+                Log.d(TAG, "Teardown requested; rules left as they are.")
+                stopVpn()
+                stopSelf()
                 START_NOT_STICKY
             }
             // Android restarting a START_STICKY service hands us a null intent.

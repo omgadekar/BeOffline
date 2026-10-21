@@ -140,6 +140,22 @@ fun SettingsScreen(
                 }
             }
         ),
+        // Only shown to someone who actually has a lock, or already had the
+        // switch on. Without this row there was no way back: revoking the
+        // accessibility permission in Android's settings left the home screen
+        // saying the blocks were not holding, "Fix this" landing here, and
+        // nothing here to fix it with — the only route back was deleting the
+        // app's locks and making them again.
+        PermissionRow(
+            title = "Stopping apps opening",
+            sub = "Lets BeOffline see which app is in front, so a locked one can be stopped.",
+            granted = lock.accessibilityEnabled,
+            visible = lock.rules.isNotEmpty() || lock.accessibilityEnabled,
+            // Never straight to Android's settings: Play requires the
+            // disclosure to be shown and acknowledged first, and its own
+            // button is what opens settings.
+            onGrant = onShowDisclosure
+        ),
         PermissionRow(
             title = "Holding traffic",
             sub = "How an app is kept offline. Nothing leaves your phone.",
@@ -152,7 +168,7 @@ fun SettingsScreen(
             granted = status?.notificationAccessEnabled ?: false,
             onGrant = dashboardViewModel::openNotificationAccessSettings
         )
-    )
+    ).filter { it.visible }
     val outstanding = permissions.count { !it.granted }
 
     Column(
@@ -550,7 +566,9 @@ private data class PermissionRow(
     val title: String,
     val sub: String,
     val granted: Boolean,
-    val onGrant: () -> Unit
+    val onGrant: () -> Unit,
+    /** False for a permission this install has no use for yet. */
+    val visible: Boolean = true
 )
 
 @Composable

@@ -182,9 +182,15 @@ class MigrationTest {
             assertEquals("Focus crew", c.getString(0))
             assertEquals("Sam", c.getString(1))
         }
-        db.query("SELECT body FROM chat_messages WHERE conversationKey = 'group:g1'").use { c ->
+        // v7 added mentionedUids; the row seeded above carries one, so assert
+        // what it actually inserts. This still said "hello" from before the
+        // mentions column existed, so the whole chain test had been failing.
+        db.query(
+            "SELECT body, mentionedUids FROM chat_messages WHERE conversationKey = 'group:g1'"
+        ).use { c ->
             assertTrue(c.moveToFirst())
-            assertEquals("hello", c.getString(0))
+            assertEquals("hey @Om", c.getString(0))
+            assertEquals("uid2", c.getString(1))
         }
 
         // v6: the disable-cooldown column exists on open_block_rules and round-trips.

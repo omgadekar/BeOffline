@@ -20,8 +20,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,9 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.beoffline.app.ui.theme.AccentPrimary
 import com.beoffline.app.ui.theme.Brand800
 import com.beoffline.app.ui.theme.Brand900
+import com.beoffline.app.ui.theme.BoPrimaryButton
 import com.beoffline.app.ui.theme.StatusActive
 import com.beoffline.app.ui.theme.TextPrimary
 import com.beoffline.app.ui.theme.TextSecondary
@@ -82,19 +80,20 @@ fun AccessibilityDisclosureScreen(
                     .padding(16.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
+                    // The app's own primary button, not Material's. This screen
+                    // was the last one reaching for a raw M3 Button, and since
+                    // the theme bakes a text colour into labelLarge, Material's
+                    // own contentColor loses — so the one switch the whole
+                    // feature depends on sat under dark text on the accent
+                    // wash, the only primary button in the app that did.
+                    BoPrimaryButton(
+                        text = "I understand — take me to settings",
                         onClick = {
                             viewModel.acceptDisclosureAndOpenSettings()
                             onBack()
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
-                    ) {
-                        Text("I understand — take me to settings")
-                    }
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     TextButton(
                         onClick = onBack,
                         modifier = Modifier.fillMaxWidth()

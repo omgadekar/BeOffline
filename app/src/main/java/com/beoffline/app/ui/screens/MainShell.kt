@@ -66,6 +66,7 @@ fun MainShell(
     onOpenApp: (AppRowUi) -> Unit,
     onAddApp: () -> Unit,
     onOpenSettings: () -> Unit,
+    onShowDisclosure: () -> Unit,
     onOpenChat: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize().background(Brand900)) {
@@ -75,7 +76,8 @@ fun MainShell(
                     onOpenApp = onOpenApp,
                     onAddApp = onAddApp,
                     onOpenSettings = onOpenSettings,
-                    onRequestVpn = onRequestVpn
+                    onRequestVpn = onRequestVpn,
+                    onFixLock = onShowDisclosure
                 )
                 ShellTab.People -> AccountabilityScreen(onOpenChat = onOpenChat)
             }

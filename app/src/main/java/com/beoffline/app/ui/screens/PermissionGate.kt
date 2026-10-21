@@ -161,11 +161,20 @@ fun PermissionGate(
         if (!state.canStart) {
             Spacer(Modifier.height(9.dp))
             Text(
-                text = "Nothing is saved until the one above is allowed — without it this " +
-                    "block would look active and do nothing.",
+                text = if (state.isEditing) {
+                    "This block already exists, and without the switch above it is not " +
+                        "holding either way. You can keep your change and allow it later."
+                } else {
+                    "Nothing is saved until the one above is allowed — without it this " +
+                        "block would look active and do nothing."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
+            // The way out for an edit — "Save without it" — is one of the
+            // dialog's own buttons rather than a line in here, because this
+            // column scrolls and an escape hatch below the fold is no escape
+            // hatch at all. See BlockCreatorScreen.
         }
     }
 }

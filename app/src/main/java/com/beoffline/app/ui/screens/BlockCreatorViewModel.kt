@@ -96,10 +96,16 @@ data class BlockCreatorUiState(
     val whenPhrase: String
         get() = when (whenKind) {
             WhenKind.Always -> "until you turn it off"
-            WhenKind.Hours ->
+            // On a saved rule, no days means every day. Here it means the user
+            // has unpicked them all, and the summary saying "Every day" while
+            // the error above says "Pick at least one day" helps nobody.
+            WhenKind.Hours -> if (activeDays.isEmpty()) {
+                "on no days yet"
+            } else {
                 "${AppStateCopy.days(activeDays)}, " +
                     "${AppStateCopy.clock(startHour, startMinute)} to " +
                     AppStateCopy.clock(endHour, endMinute)
+            }
             WhenKind.Timer -> "for the next ${spokenTimer(timerMinutes)}"
         }
 
@@ -347,7 +353,10 @@ class BlockCreatorViewModel @Inject constructor(
                 startMinute = startMinute ?: 0,
                 endHour = endHour ?: 17,
                 endMinute = endMinute ?: 0,
-                activeDays = activeDays ?: listOf(1, 2, 3, 4, 5),
+                // Belt and braces for blocks written before the converter kept
+                // null and empty apart: a rule that was never scheduled has no
+                // days, and the creator has to offer some or Save stays dead.
+                activeDays = activeDays?.takeIf { it.isNotEmpty() } ?: listOf(1, 2, 3, 4, 5),
                 timerMinutes = timerMinutes ?: 60,
                 isActive = isActive,
                 timerStartedAt = timerStartedAt,
@@ -498,11 +507,19 @@ class BlockCreatorViewModel @Inject constructor(
 
                 claimPackages(state.selectedPackages, keepLockId = null, keepBlockId = saved.id)
 
-                // The tunnel has to carry every offline package, not just this one.
-                val allOffline = blockRuleRepository.getActiveRulesOnce()
-                    .flatMap { it.blockedPackages }
-                    .distinct()
-                if (allOffline.isNotEmpty()) onNeedVpnPermission(allOffline)
+                // The tunnel has to carry every offline package, not just this
+                // one — and ONLY the ones enforcing right now. Editing a block
+                // from "always" to a 9-6 window at 7pm has to take its app back
+                // out of the tunnel, which means rebuilding it even when the
+                // answer is "nothing".
+                val allOffline = RuleScheduler.enforcedPackages(
+                    blockRuleRepository.getActiveRulesOnce()
+                )
+                if (allOffline.isEmpty()) {
+                    vpnController.stopVpn()
+                } else {
+                    onNeedVpnPermission(allOffline)
+                }
             }
             onSaved()
         }
@@ -540,9 +557,9 @@ class BlockCreatorViewModel @Inject constructor(
      * immediately.
      */
     private suspend fun syncTunnelToRemainingRules() {
-        val stillBlocked = blockRuleRepository.getActiveRulesOnce()
-            .flatMap { it.blockedPackages }
-            .distinct()
+        val stillBlocked = RuleScheduler.enforcedPackages(
+            blockRuleRepository.getActiveRulesOnce()
+        )
         if (stillBlocked.isEmpty()) {
             vpnController.stopVpn()
         } else {
