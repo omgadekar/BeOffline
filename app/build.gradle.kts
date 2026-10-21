@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.beoffline.app"
-        minSdk = 34
+        minSdk = 26
         targetSdk = 36
         // A minor bump, not a patch: the whole front end changed shape — two
         // tabs instead of five, one block object instead of two rule types,
