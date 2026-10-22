@@ -19,6 +19,18 @@ public sealed class GroupsController(AppDbContext db, INotificationService notif
     // Same unambiguous alphabet as pairing invites: no 0/O/1/I/L.
     private const string CodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
+    /// <summary>
+    /// Active group memberships one person may hold. There was no cap at all,
+    /// which left group creation unbounded: a loop could fill the table, and
+    /// every member of every one of those groups is somebody this account can
+    /// send unlock requests to. Ten matches the per-group member limit, and
+    /// both move together from configuration without a redeploy.
+    /// </summary>
+    private int MaxGroupsPerUser => config.GetValue("Accountability:GroupsPerUserMax", 10);
+
+    private Task<int> ActiveGroupCountAsync(string uid) =>
+        db.GroupMembers.CountAsync(m => m.Uid == uid && m.Status == GroupMemberStatus.Active);
+
     [HttpPost]
     public async Task<ActionResult<GroupDto>> Create(CreateGroupRequest request)
     {
@@ -28,6 +40,13 @@ public sealed class GroupsController(AppDbContext db, INotificationService notif
         var name = request.Name.Trim();
         if (name.Length is < 1 or > 64)
             return BadRequest(new { message = "Group name must be 1-64 characters." });
+
+        if (await ActiveGroupCountAsync(uid) >= MaxGroupsPerUser)
+            return Conflict(new
+            {
+                message = $"You are in {MaxGroupsPerUser} groups already, which is the limit. " +
+                          "Leave one to start another."
+            });
 
         var group = new ApproverGroup
         {
@@ -106,6 +125,15 @@ public sealed class GroupsController(AppDbContext db, INotificationService notif
         var maxMembers = config.GetValue("Accountability:GroupMaxMembers", 10);
         if (activeMembers.Count >= maxMembers)
             return Conflict(new { message = $"This group is full ({maxMembers} members max)." });
+
+        // Rejoining a group you are already a removed member of does not add a
+        // membership, so it is not counted against the cap.
+        if (existing is null && await ActiveGroupCountAsync(uid) >= MaxGroupsPerUser)
+            return Conflict(new
+            {
+                message = $"You are in {MaxGroupsPerUser} groups already, which is the limit. " +
+                          "Leave one to join another."
+            });
 
         // Anti-puppet, same rule as pairings: only a genuinely FIRST accountability
         // relationship on both sides activates immediately. If the group already

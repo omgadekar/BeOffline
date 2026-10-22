@@ -35,6 +35,7 @@ import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,18 +43,27 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.beoffline.app.data.model.CachedUnlockRequest
 import com.beoffline.app.data.model.Partner
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.beoffline.app.ui.theme.AccentBright
+import com.beoffline.app.ui.theme.AccentGlow
 import com.beoffline.app.ui.theme.AccentSecondary
 import com.beoffline.app.ui.theme.AccentSurfaceDim
 import com.beoffline.app.ui.theme.BoAvatar
@@ -95,9 +105,40 @@ fun AccountabilityScreen(
     val uiState by viewModel.uiState.collectAsState()
     val groupsState by groupsViewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var showGroupManager by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.checkConfiguration(context) }
+
+    // Notifications and the battery exemption are both granted outside this
+    // screen and come back without saying so.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshDelivery()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { viewModel.refreshDelivery() }
+
+    // Ask once, as soon as there is a reason to: an account means somebody can
+    // now be asked to unlock something, and the answer arrives as a
+    // notification. Asking here rather than waiting for the first request is
+    // the difference between a nudge and a request that silently never lands.
+    // Android stops showing this dialog after two refusals, which is what the
+    // card below is for.
+    var askedForNotifications by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(uiState.signedIn, uiState.notificationsOn) {
+        if (uiState.signedIn && !uiState.notificationsOn && !askedForNotifications &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        ) {
+            askedForNotifications = true
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     if (showGroupManager) {
         GroupsScreen(
@@ -163,7 +204,30 @@ fun AccountabilityScreen(
                     return@LazyColumn
                 }
 
-                // Incoming requests first — they're time-critical.
+                // Before anything else: whether an answer can reach you at all.
+                if (!uiState.notificationsOn || !uiState.batteryUnrestricted) {
+                    item(key = "delivery") {
+                        DeliveryCard(
+                            notificationsOn = uiState.notificationsOn,
+                            batteryUnrestricted = uiState.batteryUnrestricted,
+                            onAllowNotifications = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    !askedForNotifications
+                                ) {
+                                    askedForNotifications = true
+                                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    // Refused twice, or pre-Tiramisu: the system
+                                    // dialog is gone, so send them to the switch.
+                                    viewModel.openNotificationSettings()
+                                }
+                            },
+                            onAllowBattery = viewModel::requestBatteryExemption
+                        )
+                    }
+                }
+
+                // Incoming requests next — they're time-critical.
                 items(uiState.incomingPending, key = { it.id }) { request ->
                     IncomingRequestCard(
                         request = request,
@@ -440,6 +504,64 @@ private fun PartnerCard(
                 )
             }
         }
+    }
+}
+
+/**
+ * The two switches that decide whether any of this tab works when the app is
+ * closed, which is every time that matters.
+ *
+ * Notifications alone are not enough on a good many phones. One UI and the
+ * other aggressive battery managers defer high-priority FCM data messages for
+ * a sleeping app, so an approval can sit undelivered until something else
+ * wakes the app — which reads exactly like the request never arrived.
+ */
+@Composable
+private fun DeliveryCard(
+    notificationsOn: Boolean,
+    batteryUnrestricted: Boolean,
+    onAllowNotifications: () -> Unit,
+    onAllowBattery: () -> Unit
+) {
+    BoCard(modifier = Modifier.fillMaxWidth(), accented = true) {
+        BoEyebrow("Answers may not reach you", color = AccentSecondary)
+        Text(
+            text = "A request, and the reply to it, arrive as a notification. " +
+                "Android has to be allowed to deliver one while the app is closed.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        if (!notificationsOn) {
+            DeliveryRow(
+                title = "Show notifications",
+                why = "Without this there is nothing to tell you somebody asked.",
+                onAllow = onAllowNotifications
+            )
+        }
+        if (!batteryUnrestricted) {
+            DeliveryRow(
+                title = "Keep running in the background",
+                why = "Android holds messages for a sleeping app. On some phones " +
+                    "that is hours, which is long past the point of being useful.",
+                onAllow = onAllowBattery
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeliveryRow(title: String, why: String, onAllow: () -> Unit) {
+    Column(modifier = Modifier.padding(top = 14.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+        Text(
+            text = why,
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+        Spacer(Modifier.height(10.dp))
+        BoWideOutlineButton(text = "Allow", onClick = onAllow)
     }
 }
 

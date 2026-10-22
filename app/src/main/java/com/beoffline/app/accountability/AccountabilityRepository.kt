@@ -113,8 +113,23 @@ class AccountabilityRepository @Inject constructor(
     suspend fun hasGroup(): Boolean =
         FirebaseAuth.getInstance().currentUser != null && groupCacheDao.getAllOnce().isNotEmpty()
 
-    /** Oldest-joined group — the overlay's "Ask my group" target (v1: no chooser). */
-    suspend fun firstGroup(): GroupCache? = groupCacheDao.getAllOnce().firstOrNull()
+    /**
+     * The groups this person can actually ask, for the block screen.
+     *
+     * Two things were wrong with handing the overlay a single group. It took
+     * whichever one the server listed first — oldest *created*, not oldest
+     * joined, and nothing to do with which group you would want — so a group
+     * made five minutes ago was unreachable from the one screen that needs it.
+     * And it did not check that the group had anyone else in it: a group of one
+     * has nobody to answer, the server rejects the request with a 400, and the
+     * ask disappears without ever reaching a person.
+     *
+     * So: every group with someone else in it, and the overlay asks which.
+     * [membersOf] is already active members only — the server leaves removed
+     * ones out of the DTO.
+     */
+    suspend fun askableGroups(): List<GroupCache> =
+        groupCacheDao.getAllOnce().filter { membersOf(it).size >= 2 }
 
     /** The single partner's stored display name, for the overlay's "Ask …" button. */
     suspend fun firstPartnerName(): String? =

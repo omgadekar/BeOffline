@@ -134,12 +134,32 @@ class GroupsViewModel @Inject constructor(
         }
     }
 
-    private fun friendly(e: Exception): String = when {
-        e is retrofit2.HttpException && e.code() == 404 -> "Invalid or expired code."
-        e is retrofit2.HttpException && e.code() == 409 -> "Not possible — the group may be full, or this is already done."
-        e is retrofit2.HttpException && e.code() == 403 -> "Not allowed."
-        e is retrofit2.HttpException && e.code() == 400 -> "The server rejected that — check the input."
-        e is java.io.IOException -> "No connection — try again when you're online."
+    /**
+     * The server says why in a {"message": "..."} body, and it says it better
+     * than a status code can: which limit was hit, how many of what, what to do
+     * instead. Prefer it, and keep the generic lines for when it is absent.
+     */
+    private fun friendly(e: Exception): String = when (e) {
+        is retrofit2.HttpException -> serverMessage(e) ?: when (e.code()) {
+            404 -> "Invalid or expired code."
+            409 -> "Not possible — the group may be full, or this is already done."
+            403 -> "Not allowed."
+            400 -> "The server rejected that — check the input."
+            else -> e.message()
+        }
+        is java.io.IOException -> "No connection — try again when you're online."
         else -> e.message ?: "Something went wrong."
+    }
+
+    private fun serverMessage(e: retrofit2.HttpException): String? = try {
+        e.response()?.errorBody()?.string()
+            ?.let { com.google.gson.JsonParser.parseString(it) }
+            ?.takeIf { it.isJsonObject }
+            ?.asJsonObject?.get("message")
+            ?.takeIf { it.isJsonPrimitive }
+            ?.asString
+            ?.takeIf { it.isNotBlank() }
+    } catch (_: Exception) {
+        null
     }
 }
