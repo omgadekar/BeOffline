@@ -1,9 +1,5 @@
 package com.beoffline.app.ui.screens
 
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -105,9 +101,13 @@ fun SettingsScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showChallengePreview by remember { mutableStateOf(false) }
 
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { dashboardViewModel.refreshBackgroundProtection() }
+    // Settings is the way back for someone who already said no, so this is
+    // the one place the Allow control must never be a no-op: past the point
+    // where Android still draws its dialog, it opens the switch instead.
+    val notifications = rememberNotificationPermissionRequest(
+        openSettings = dashboardViewModel::openNotificationSettings,
+        onResult = { dashboardViewModel.refreshBackgroundProtection() }
+    )
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -132,13 +132,7 @@ fun SettingsScreen(
             title = "Notifications",
             sub = "A quiet note while a block is on",
             granted = status?.notificationsEnabled ?: false,
-            onGrant = {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else {
-                    dashboardViewModel.openNotificationSettings()
-                }
-            }
+            onGrant = notifications.onTap
         ),
         // Only shown to someone who actually has a lock, or already had the
         // switch on. Without this row there was no way back: revoking the

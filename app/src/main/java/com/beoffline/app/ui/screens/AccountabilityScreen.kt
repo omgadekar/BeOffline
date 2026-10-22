@@ -58,10 +58,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.beoffline.app.data.model.CachedUnlockRequest
 import com.beoffline.app.data.model.Partner
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import com.beoffline.app.ui.theme.AccentBright
 import com.beoffline.app.ui.theme.AccentGlow
 import com.beoffline.app.ui.theme.AccentSecondary
@@ -120,23 +116,23 @@ fun AccountabilityScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val notificationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { viewModel.refreshDelivery() }
+    val notifications = rememberNotificationPermissionRequest(
+        openSettings = viewModel::openNotificationSettings,
+        onResult = { viewModel.refreshDelivery() }
+    )
 
     // Ask once, as soon as there is a reason to: an account means somebody can
     // now be asked to unlock something, and the answer arrives as a
     // notification. Asking here rather than waiting for the first request is
     // the difference between a nudge and a request that silently never lands.
-    // Android stops showing this dialog after two refusals, which is what the
-    // card below is for.
-    var askedForNotifications by rememberSaveable { mutableStateOf(false) }
+    // askIfPossible, not onTap — nobody tapped anything, so this may put the
+    // system dialog up but must never throw someone out into Settings. When
+    // the dialog is spent, the card below is what is left.
+    var askedThisVisit by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(uiState.signedIn, uiState.notificationsOn) {
-        if (uiState.signedIn && !uiState.notificationsOn && !askedForNotifications &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-        ) {
-            askedForNotifications = true
-            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        if (uiState.signedIn && !uiState.notificationsOn && !askedThisVisit) {
+            askedThisVisit = true
+            notifications.askIfPossible()
         }
     }
 
@@ -210,18 +206,7 @@ fun AccountabilityScreen(
                         DeliveryCard(
                             notificationsOn = uiState.notificationsOn,
                             batteryUnrestricted = uiState.batteryUnrestricted,
-                            onAllowNotifications = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                    !askedForNotifications
-                                ) {
-                                    askedForNotifications = true
-                                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                } else {
-                                    // Refused twice, or pre-Tiramisu: the system
-                                    // dialog is gone, so send them to the switch.
-                                    viewModel.openNotificationSettings()
-                                }
-                            },
+                            onAllowNotifications = notifications.onTap,
                             onAllowBattery = viewModel::requestBatteryExemption
                         )
                     }
