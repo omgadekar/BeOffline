@@ -21,11 +21,13 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -86,6 +88,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun AccountabilityScreen(
     onOpenChat: (String) -> Unit,
+    onOpenSettings: () -> Unit = {},
     viewModel: AccountabilityViewModel = hiltViewModel(),
     groupsViewModel: GroupsViewModel = hiltViewModel()
 ) {
@@ -116,7 +119,8 @@ fun AccountabilityScreen(
         ) {
             BoScreenHeaderWithName(
                 signedIn = uiState.signedIn,
-                userName = uiState.userName
+                userName = uiState.userName,
+                onOpenSettings = onOpenSettings
             )
             BoFadedDivider()
 
@@ -220,16 +224,49 @@ fun AccountabilityScreen(
     }
 }
 
+/**
+ * Settings lives in the header on both tabs. The same 44dp target in the same
+ * corner, top-aligned so it does not shift when you move between them.
+ */
 @Composable
-private fun BoScreenHeaderWithName(signedIn: Boolean, userName: String?) {
-    Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 14.dp)) {
-        Text("People", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
-        Text(
-            text = if (signedIn) "Signed in as ${userName.firstName(fallback = "you")}" else "Not signed in",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextTertiary,
-            modifier = Modifier.padding(top = 3.dp)
-        )
+private fun BoScreenHeaderWithName(
+    signedIn: Boolean,
+    userName: String?,
+    onOpenSettings: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 22.dp, end = 12.dp, top = 16.dp, bottom = 14.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("People", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
+            Text(
+                text = if (signedIn) {
+                    "Signed in as ${userName.firstName(fallback = "you")}"
+                } else {
+                    "Not signed in"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextTertiary,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .clickable(role = Role.Button, onClick = onOpenSettings),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Outlined.Settings,
+                contentDescription = "Settings",
+                tint = TextSecondary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
     }
 }
 
