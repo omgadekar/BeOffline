@@ -65,6 +65,9 @@ class AccountabilityRepository @Inject constructor(
         private const val OUTBOX_CHAT = "CHAT_MESSAGE"
         private const val OUTBOX_SOLO_UNLOCK = "SOLO_UNLOCK"
 
+        /** Give up on a queued item after this many failed sends. */
+        private const val MAX_OUTBOX_ATTEMPTS = 12
+
         /** Notification → NavGraph deep-link. Read by MainActivity. */
         const val EXTRA_NAV_ROUTE = "beoffline.nav_route"
         const val ROUTE_ACCOUNTABILITY = "accountability"
@@ -82,9 +85,25 @@ class AccountabilityRepository @Inject constructor(
     var activeConversationKey: String? = null
 
     val partners: Flow<List<Partner>> = partnerDao.getActive()
-    val allRequests: Flow<List<CachedUnlockRequest>> = requestCacheDao.getAll()
-    val incomingPending: Flow<List<CachedUnlockRequest>> = requestCacheDao.getIncomingPending()
+
+    // The People tab carries 1:1 partner requests only. A group's requests
+    // belong to that group's conversation — see [groupRequests].
+    val allRequests: Flow<List<CachedUnlockRequest>> = requestCacheDao.getAllDirect()
+    val incomingPending: Flow<List<CachedUnlockRequest>> = requestCacheDao.getIncomingPendingDirect()
     val groups: Flow<List<GroupCache>> = groupCacheDao.getAll()
+
+    /**
+     * Group requests waiting on an answer. Not a second place to answer them —
+     * that is the chat — just enough for a group row to say somebody is
+     * waiting, so a notification nobody saw does not become a request nobody
+     * knows about.
+     */
+    val incomingPendingGroup: Flow<List<CachedUnlockRequest>> =
+        requestCacheDao.getIncomingPendingGroup()
+
+    /** Every request raised in one group, oldest first — rendered in its chat. */
+    fun groupRequests(groupId: String): Flow<List<CachedUnlockRequest>> =
+        requestCacheDao.forGroup(groupId)
 
     fun myUid(): String? = FirebaseAuth.getInstance().currentUser?.uid
 
@@ -369,10 +388,26 @@ class AccountabilityRepository @Inject constructor(
 
     // ── Outbox drain (called by OutboxWorker on network) ─────────────────────
 
-    /** Returns true when the outbox is empty afterwards. */
+    /**
+     * Sends everything queued. Returns true when nothing worth retrying is
+     * left, which is what tells WorkManager this unit of work is finished.
+     *
+     * The distinction matters more than it looks. An item the server will
+     * never accept — the group is gone, the body was rejected, the pairing
+     * ended — used to keep this returning false forever, and a one-time
+     * WorkManager job that keeps asking to be retried is never *done*: with
+     * the KEEP policy that OutboxWorker used on the enqueue side, every later
+     * send was dropped on the floor, and the only sign of it was a message
+     * sitting on "sending…" for the rest of the day. So a permanently-rejected item is
+     * dropped here rather than being retried into eternity, and so is one that
+     * has failed [MAX_OUTBOX_ATTEMPTS] times for any other reason.
+     *
+     * A dropped chat message keeps its local row: the sender wrote those words
+     * and deleting them silently would be worse than showing "not sent".
+     */
     suspend fun drainOutbox(): Boolean {
         val items = outboxDao.getAllOnce()
-        var allSent = true
+        var retryWanted = false
         for (item in items) {
             try {
                 when (item.type) {
@@ -405,12 +440,86 @@ class AccountabilityRepository @Inject constructor(
                 }
                 outboxDao.delete(item.id)
             } catch (e: Exception) {
-                Log.w(TAG, "Outbox item ${item.id} (${item.type}) failed: ${e.message}")
-                outboxDao.incrementAttempts(item.id)
-                allSent = false
+                val attempts = item.attempts + 1
+                if (isPermanent(e) || attempts >= MAX_OUTBOX_ATTEMPTS) {
+                    Log.w(TAG, "Outbox item ${item.id} (${item.type}) dropped after $attempts: ${e.message}")
+                    outboxDao.delete(item.id)
+                    // A request that was never accepted has no server side to
+                    // wait on, so its "Queued" row would sit there claiming
+                    // otherwise. A chat message keeps its row — the words are
+                    // the sender's, and the bubble says "not sent".
+                    if (item.type == OUTBOX_UNLOCK_REQUEST) {
+                        runCatching {
+                            val body = gson.fromJson(item.payloadJson, CreateRequestBody::class.java)
+                            requestCacheDao.delete(body.clientRequestId)
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "Outbox item ${item.id} (${item.type}) failed: ${e.message}")
+                    outboxDao.incrementAttempts(item.id)
+                    retryWanted = true
+                }
             }
         }
-        return allSent
+        return !retryWanted
+    }
+
+    /**
+     * True when retrying cannot help. 4xx is the server saying the request
+     * itself is wrong — except 401 (a token this client refreshes on its own),
+     * 408 and 429 (both explicitly "try again").
+     */
+    private fun isPermanent(e: Exception): Boolean {
+        val code = (e as? retrofit2.HttpException)?.code() ?: return false
+        return code in 400..499 && code != 401 && code != 408 && code != 429
+    }
+
+    /**
+     * Queues a stuck message again. The send path is idempotent on the client
+     * message id, so re-sending one the server already stored is harmless — it
+     * hands back the stored copy, which replaces the local echo as usual.
+     */
+    suspend fun retryChatMessage(groupId: String, message: ChatMessageCache) {
+        if (!message.pending) return
+        outboxDao.deleteByClientKey(message.id)
+        outboxDao.insert(
+            OutboxItem(
+                type = OUTBOX_CHAT,
+                clientKey = message.id,
+                payloadJson = gson.toJson(
+                    ChatOutboxPayload(
+                        groupId,
+                        message.id,
+                        message.body,
+                        message.mentionedUids?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+                    )
+                )
+            )
+        )
+        OutboxWorker.enqueue(context)
+    }
+
+    /**
+     * Everything that should be true again the moment the app is back in front
+     * of someone: the push token the server holds, whatever the outbox still
+     * owes, and the caches that a missed push would have left behind.
+     *
+     * Push is not a guarantee. A data message can be dropped by FCM, delayed
+     * for hours by a manufacturer's battery management, or sent to a token the
+     * server no longer has — and none of that is visible from here. Pulling on
+     * every foreground is what keeps a missed event from being a lost one.
+     */
+    suspend fun syncOnForeground() {
+        if (FirebaseAuth.getInstance().currentUser == null) return
+        registerDevice()
+        OutboxWorker.enqueue(context)
+        try {
+            refreshPartners()
+            refreshGroups()
+            refreshRequests()
+        } catch (e: Exception) {
+            Log.d(TAG, "Foreground sync incomplete: ${e.message}")
+        }
     }
 
     // ── Push / event handling (FCM + refresh share this) ─────────────────────
@@ -421,12 +530,18 @@ class AccountabilityRepository @Inject constructor(
             "UNLOCK_REQUEST" -> {
                 val dto = gson.fromJson(payloadJson, UnlockRequestDto::class.java)
                 requestCacheDao.upsert(dto.toEntity("INCOMING"))
-                notify(
-                    dto.id.hashCode(),
-                    "${dto.requesterName.firstName()} asks to open ${dto.appLabel}",
-                    "Open BeOffline to approve or deny.",
-                    route = ROUTE_ACCOUNTABILITY
-                )
+                // A group's requests are answered in its chat, so that is where
+                // the tap has to land. Looking at that chat already — the card
+                // is on screen — so there is nothing left for a notification
+                // to tell you.
+                if (!dto.showsInActiveChat()) {
+                    notify(
+                        dto.id.hashCode(),
+                        "${dto.requesterName.firstName()} asks to open ${dto.appLabel}",
+                        dto.groupName?.let { "Answer it in $it." } ?: "Open BeOffline to approve or deny.",
+                        route = dto.route()
+                    )
+                }
             }
             "REQUEST_APPROVED" -> {
                 val dto = gson.fromJson(payloadJson, UnlockRequestDto::class.java)
@@ -439,7 +554,7 @@ class AccountabilityRepository @Inject constructor(
                     dto.id.hashCode(),
                     "${dto.appLabel} unlocked",
                     "Approved for ${dto.grantedDurationMinutes} minutes. Open it now.",
-                    route = ROUTE_ACCOUNTABILITY
+                    route = dto.route()
                 )
             }
             "REQUEST_DENIED", "REQUEST_EXPIRED" -> {
@@ -449,19 +564,21 @@ class AccountabilityRepository @Inject constructor(
                     dto.id.hashCode(),
                     if (type == "REQUEST_DENIED") "Request denied" else "Request expired",
                     "${dto.appLabel} stays blocked.",
-                    route = ROUTE_ACCOUNTABILITY
+                    route = dto.route()
                 )
             }
             "REQUEST_RESOLVED" -> {
                 // Group scope: someone else already answered ("resolved by X").
                 val dto = gson.fromJson(payloadJson, UnlockRequestDto::class.java)
                 requestCacheDao.upsert(dto.toEntity("INCOMING"))
-                notify(
-                    dto.id.hashCode(),
-                    "Request resolved",
-                    "${dto.resolvedByName.firstName(fallback = "Another member")} already responded for ${dto.appLabel}.",
-                    route = ROUTE_ACCOUNTABILITY
-                )
+                if (!dto.showsInActiveChat()) {
+                    notify(
+                        dto.id.hashCode(),
+                        "Request resolved",
+                        "${dto.resolvedByName.firstName(fallback = "Another member")} already responded for ${dto.appLabel}.",
+                        route = dto.route()
+                    )
+                }
             }
             "INVITE_ACCEPTED", "PARTNER_REMOVAL_STARTED", "PARTNER_REMOVED" -> {
                 try { refreshPartners() } catch (_: Exception) { }
@@ -519,6 +636,17 @@ class AccountabilityRepository @Inject constructor(
             }
         }
     }
+
+    /**
+     * Where a tap on this request's notification should land: the group's own
+     * conversation when it belongs to one, the People tab when it is 1:1.
+     */
+    private fun UnlockRequestDto.route(): String =
+        groupId?.let { groupChatRoute(it) } ?: ROUTE_ACCOUNTABILITY
+
+    /** True when this request's group chat is the screen already in front of someone. */
+    private fun UnlockRequestDto.showsInActiveChat(): Boolean =
+        groupId != null && conversationKeyFor(groupId) == activeConversationKey
 
     private suspend fun ensureAllowance(request: CachedUnlockRequest) {
         val grantedUntil = request.grantedUntilUtc ?: return

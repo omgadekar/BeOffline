@@ -8,6 +8,7 @@ import com.beoffline.app.accountability.GroupMemberDto
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -17,7 +18,9 @@ data class GroupUi(
     val groupId: String,
     val name: String,
     val ownerUid: String,
-    val members: List<GroupMemberDto>
+    val members: List<GroupMemberDto>,
+    /** Unlock requests in this group still waiting on an answer. */
+    val waiting: Int = 0
 )
 
 data class GroupsUiState(
@@ -48,12 +51,25 @@ class GroupsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            repository.groups.collect { groups ->
-                _uiState.update { state ->
-                    state.copy(groups = groups.map {
-                        GroupUi(it.groupId, it.name, it.ownerUid, repository.membersOf(it))
-                    })
+            combine(repository.groups, repository.incomingPendingGroup) { groups, waiting ->
+                val now = System.currentTimeMillis()
+                // A row the server has not got round to expiring yet is not
+                // something to put a badge on.
+                val byGroup = waiting
+                    .filter { it.expiresAtUtc == null || it.expiresAtUtc > now }
+                    .groupingBy { it.groupId }
+                    .eachCount()
+                groups.map {
+                    GroupUi(
+                        groupId = it.groupId,
+                        name = it.name,
+                        ownerUid = it.ownerUid,
+                        members = repository.membersOf(it),
+                        waiting = byGroup[it.groupId] ?: 0
+                    )
                 }
+            }.collect { groups ->
+                _uiState.update { it.copy(groups = groups) }
             }
         }
     }

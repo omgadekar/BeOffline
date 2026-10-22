@@ -1,7 +1,6 @@
 package com.beoffline.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +28,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -48,12 +48,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.beoffline.app.data.model.CachedUnlockRequest
 import com.beoffline.app.data.model.Partner
 import com.beoffline.app.ui.theme.AccentBright
-import com.beoffline.app.ui.theme.AccentPrimary
 import com.beoffline.app.ui.theme.AccentSecondary
 import com.beoffline.app.ui.theme.AccentSurfaceDim
 import com.beoffline.app.ui.theme.BoAvatar
@@ -62,10 +60,11 @@ import com.beoffline.app.ui.theme.BoChip
 import com.beoffline.app.ui.theme.BoEyebrow
 import com.beoffline.app.ui.theme.BoFadedDivider
 import com.beoffline.app.ui.theme.BoHairline
+import com.beoffline.app.ui.theme.BoInviteCode
 import com.beoffline.app.ui.theme.BoPrimaryButton
 import com.beoffline.app.ui.theme.BoSecondaryButton
 import com.beoffline.app.ui.theme.BoShape
-import com.beoffline.app.ui.theme.Brand700
+import com.beoffline.app.ui.theme.BoWideOutlineButton
 import com.beoffline.app.ui.theme.Brand800
 import com.beoffline.app.ui.theme.Brand900
 import com.beoffline.app.ui.theme.StatusDanger
@@ -341,6 +340,7 @@ private fun PartnerCard(
                         style = MaterialTheme.typography.labelLarge,
                         color = TextDisabled,
                         modifier = Modifier
+                            .minimumInteractiveComponentSize()
                             .clip(BoShape.Control)
                             .clickable(role = Role.Button) { onRemove(partner) }
                             .padding(horizontal = 6.dp, vertical = 4.dp)
@@ -369,29 +369,17 @@ private fun PartnerCard(
 
             uiState.inviteCode?.let { code ->
                 Spacer(Modifier.height(14.dp))
-                Text(
-                    "Share this code (valid 24h)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary
-                )
-                Text(
-                    text = code,
-                    style = MaterialTheme.typography.headlineMedium.copy(letterSpacing = 6.sp),
-                    color = AccentSecondary,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                BoInviteCode(code)
             }
 
             Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Create invite code",
-                style = MaterialTheme.typography.labelLarge,
-                color = AccentBright,
-                modifier = Modifier
-                    .clip(BoShape.Control)
-                    .border(1.dp, AccentPrimary, BoShape.Control)
-                    .clickable(enabled = !uiState.busy, role = Role.Button) { onCreateInvite() }
-                    .padding(horizontal = 13.dp, vertical = 9.dp)
+            // Full width and a real 48dp of height. This was a bare Text with
+            // 9dp of padding — about 38dp tall and only as wide as its own
+            // label — which took several tries to hit.
+            BoWideOutlineButton(
+                text = if (uiState.inviteCode == null) "Create invite code" else "Create a new code",
+                onClick = onCreateInvite,
+                enabled = !uiState.busy
             )
 
             Spacer(Modifier.height(12.dp))
@@ -432,6 +420,7 @@ private fun GroupsCard(
                 style = MaterialTheme.typography.labelLarge,
                 color = TextSecondary,
                 modifier = Modifier
+                    .minimumInteractiveComponentSize()
                     .clip(BoShape.Control)
                     .clickable(role = Role.Button, onClick = onManage)
                     .padding(horizontal = 4.dp, vertical = 2.dp)
@@ -473,10 +462,17 @@ private fun GroupsCard(
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(group.name, style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
+                    // Group requests are answered inside the chat, so the row
+                    // only points at them. It never offers a second Approve.
+                    val waiting = group.waiting
                     Text(
-                        text = "${group.members.size} member" + if (group.members.size == 1) "" else "s",
+                        text = if (waiting > 0) {
+                            "$waiting waiting on an answer"
+                        } else {
+                            "${group.members.size} member" + if (group.members.size == 1) "" else "s"
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
+                        color = if (waiting > 0) AccentSecondary else TextTertiary,
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
@@ -505,6 +501,7 @@ private fun RecentRequestsSection(
                 style = MaterialTheme.typography.labelLarge,
                 color = TextDisabled,
                 modifier = Modifier
+                    .minimumInteractiveComponentSize()
                     .clip(BoShape.Control)
                     .clickable(enabled = enabled, role = Role.Button, onClick = onClear)
                     .padding(horizontal = 4.dp, vertical = 2.dp)

@@ -20,8 +20,10 @@ import com.beoffline.app.ui.navigation.BeOfflineNavGraph
 import com.beoffline.app.ui.theme.BeOfflineTheme
 import com.beoffline.app.ui.theme.Brand900
 import com.beoffline.app.vpn.VpnController
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -32,6 +34,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var realtimeClient: RealtimeClient
+
+    @Inject
+    lateinit var accountabilityRepository: AccountabilityRepository
 
     // Deep-link target from a tapped notification (null = normal launch).
     private val navRoute = MutableStateFlow<String?>(null)
@@ -129,6 +134,11 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         realtimeClient.start()
+        // Push is best-effort — a data message can be dropped, delayed for
+        // hours by a manufacturer's battery management, or addressed to a
+        // token the server no longer holds. Coming back to the app is the
+        // moment to re-register, flush the outbox and pull what was missed.
+        lifecycleScope.launch { accountabilityRepository.syncOnForeground() }
     }
 
     override fun onStop() {

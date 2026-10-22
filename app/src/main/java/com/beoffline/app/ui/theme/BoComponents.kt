@@ -18,18 +18,24 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,8 +48,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The redesign's shared vocabulary. Every screen is assembled from these, so a
@@ -247,6 +257,94 @@ fun BoHeaderAction(
             Icon(icon, contentDescription = null, tint = AccentBright, modifier = Modifier.size(14.dp))
         }
         Text(text, style = MaterialTheme.typography.labelMedium, color = AccentBright)
+    }
+}
+
+/**
+ * An invite code, sized to be read out loud and copied in one tap. Six
+ * characters someone has to retype on another phone is the one place in this
+ * app where a transcription slip costs the whole flow.
+ */
+@Composable
+fun BoInviteCode(
+    code: String,
+    modifier: Modifier = Modifier,
+    caption: String = "Share this code — it works for 24 hours"
+) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember(code) { mutableStateOf(false) }
+
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(2_000)
+            copied = false
+        }
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp)
+                .clip(BoShape.Control)
+                .background(AccentSurface)
+                .border(1.dp, AccentGlow, BoShape.Control)
+                .clickable(role = Role.Button) {
+                    clipboard.setText(AnnotatedString(code))
+                    copied = true
+                }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = code,
+                style = MaterialTheme.typography.headlineMedium.copy(letterSpacing = 6.sp),
+                color = AccentBright,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                Icons.Outlined.ContentCopy,
+                contentDescription = "Copy invite code",
+                tint = AccentBright,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+        Text(
+            text = if (copied) "Copied" else "Tap to copy",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (copied) AccentSecondary else TextDisabled,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+/**
+ * An accent outline that spans its container and clears the 48dp touch
+ * minimum. Not [BoPrimaryButton]: a screen gets one filled button, and this is
+ * for the card-level action that is not it.
+ */
+@Composable
+fun BoWideOutlineButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(BoShape.Control)
+            .border(1.dp, if (enabled) AccentPrimary else Brand700, BoShape.Control)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (enabled) AccentBright else TextDisabled
+        )
     }
 }
 
