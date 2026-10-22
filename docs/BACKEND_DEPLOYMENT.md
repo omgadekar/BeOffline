@@ -9,7 +9,9 @@ artifact (2026-07-20), which is what the live deployment was actually built from
 below matches it.
 
 **Scope.** This deploys the backend only. The Android work ships through Play — see
-`docs/RELEASE_BUILD.md`.
+`docs/RELEASE_BUILD.md`. For running the API as a container instead of under systemd — same
+VM, same nginx, same Postgres, but a deploy becomes a tag and a rollback becomes the previous
+tag — see `docs/BACKEND_DOCKER.md`.
 
 ---
 
@@ -77,6 +79,26 @@ ssh ubuntu@<VM_IP> "grep -A2 Accountability /opt/beoffline-api/appsettings.Produ
 ```
 
 If that returns nothing, the key is absent and the committed `12` is in force.
+
+### Group limits need no production change
+
+`Accountability:GroupMaxMembers` (10) and `Accountability:GroupsPerUserMax` (10) are both
+defaulted in code and listed in the committed `appsettings.json`, so a deploy of the binary is
+all it takes to put the per-user cap in force. There was no cap on groups per user before it;
+the member limit has always been 10 and is unchanged.
+
+Only add either to `appsettings.Production.json` to run a *different* number. ASP.NET merges
+the production file key by key rather than replacing the whole `Accountability` object, so
+adding one key there leaves the rest alone:
+
+```json
+"Accountability": {
+  "ApproverActivationCooldownHours": 0,
+  "GroupsPerUserMax": 25
+}
+```
+
+Both are read per request, but the file is only loaded at start — restart after editing.
 
 ### Secrets never leave the VM
 
