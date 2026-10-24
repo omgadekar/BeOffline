@@ -556,6 +556,16 @@ private fun GroupsCard(
     onOpenChat: (String) -> Unit,
     onManage: () -> Unit
 ) {
+    // Ticks so a removal countdown on a row stays honest without the screen
+    // being left and reopened.
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            now = System.currentTimeMillis()
+        }
+    }
+
     BoCard(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BoEyebrow("Groups", modifier = Modifier.weight(1f))
@@ -609,14 +619,23 @@ private fun GroupsCard(
                     // Group requests are answered inside the chat, so the row
                     // only points at them. It never offers a second Approve.
                     val waiting = group.waiting
+                    val leavingIn = group.leavingAt?.takeIf { it > now }
                     Text(
-                        text = if (waiting > 0) {
-                            "$waiting waiting on an answer"
-                        } else {
-                            "${group.members.size} member" + if (group.members.size == 1) "" else "s"
+                        text = when {
+                            // Somebody else removing you is the only reason a
+                            // group hangs around now, so it says so.
+                            leavingIn != null ->
+                                "You leave this group in ${formatCooldownRemaining(leavingIn, now)}"
+                            waiting > 0 -> "$waiting waiting on an answer"
+                            else -> "${group.members.size} member" +
+                                if (group.members.size == 1) "" else "s"
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (waiting > 0) AccentSecondary else TextTertiary,
+                        color = when {
+                            leavingIn != null -> StatusDanger
+                            waiting > 0 -> AccentSecondary
+                            else -> TextTertiary
+                        },
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }

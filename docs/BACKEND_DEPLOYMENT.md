@@ -100,6 +100,29 @@ adding one key there leaves the rest alone:
 
 Both are read per request, but the file is only loaded at start — restart after editing.
 
+### Leaving a group is immediate; removing somebody is not
+
+These used to share one mechanic and a cooldown. They no longer do, and the
+split is deliberate:
+
+| Act | Effect |
+|---|---|
+| Leaving a group yourself | **Immediate.** Out of the member list, the chat and reach. An owner who leaves hands the group to the longest-standing member who stayed. Works even while an owner is part-way through removing you. |
+| An owner removing somebody else | Unchanged — `RemovalCooldownHours`, with everyone told at once. |
+| 1:1 partner removal | Unchanged — same cooldown. That relationship is the accountability contract itself. |
+
+The old behaviour failed the case it most has to handle: someone in a group
+with a person they want away from, held in the conversation for another twelve
+hours. Play's user-generated-content policy expects a way out of a chat that
+works when it is pressed. The cooldown also bought little here — group
+membership grants approvers, it does not enforce anything, so leaving one has
+never unlocked a thing. The friction that matters stayed where it matters: an
+owner still cannot quietly delete the people holding them to something.
+
+**This needs the redeploy to take effect.** Until the binary is updated, leaving
+still runs the cooldown, and the app's new copy will promise something the
+server does not yet do.
+
 ### Secrets never leave the VM
 
 The committed `appsettings.json` keeps `Password=CHANGE_ME`. The real password lives only in

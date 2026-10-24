@@ -610,8 +610,11 @@ class AccountabilityRepository @Inject constructor(
                 val groupName = map?.get("groupName")?.toString() ?: "Your group"
                 val message = when (type) {
                     "GROUP_MEMBER_JOINED" -> "A new member joined $groupName."
-                    "GROUP_MEMBER_REMOVAL_STARTED" -> "A member is leaving $groupName. Their membership stays active for the cooldown period."
-                    else -> "A membership in $groupName has ended."
+                    // Only ever an owner removing somebody now — leaving of
+                    // your own accord is immediate and arrives as _LEFT.
+                    "GROUP_MEMBER_REMOVAL_STARTED" ->
+                        "A member is being removed from $groupName. It takes effect after a cooldown."
+                    else -> "Someone left $groupName."
                 }
                 notify((type + groupName).hashCode(), groupName, message, route = ROUTE_GROUPS)
             }

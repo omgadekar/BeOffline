@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.accountability.AuthManager
 import com.beoffline.app.accountability.GroupMemberDto
+import com.beoffline.app.accountability.serverMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import javax.inject.Inject
 
 data class GroupUi(
@@ -20,7 +22,12 @@ data class GroupUi(
     val ownerUid: String,
     val members: List<GroupMemberDto>,
     /** Unlock requests in this group still waiting on an answer. */
-    val waiting: Int = 0
+    val waiting: Int = 0,
+    /**
+     * When the owner's removal of *you* takes effect. Null normally — leaving
+     * of your own accord is immediate and the group simply goes.
+     */
+    val leavingAt: Long? = null
 )
 
 data class GroupsUiState(
@@ -59,13 +66,19 @@ class GroupsViewModel @Inject constructor(
                     .filter { it.expiresAtUtc == null || it.expiresAtUtc > now }
                     .groupingBy { it.groupId }
                     .eachCount()
+                val me = _uiState.value.myUid
                 groups.map {
+                    val members = repository.membersOf(it)
                     GroupUi(
                         groupId = it.groupId,
                         name = it.name,
                         ownerUid = it.ownerUid,
-                        members = repository.membersOf(it),
-                        waiting = byGroup[it.groupId] ?: 0
+                        members = members,
+                        waiting = byGroup[it.groupId] ?: 0,
+                        leavingAt = members
+                            .firstOrNull { m -> m.uid == me && m.removalPending }
+                            ?.removalEffectiveAtUtc
+                            ?.let { at -> runCatching { Instant.parse(at).toEpochMilli() }.getOrNull() }
                     )
                 }
             }.collect { groups ->
@@ -109,12 +122,24 @@ class GroupsViewModel @Inject constructor(
         }
     }
 
-    /** Leaving yourself, or (as owner) removing someone — either way the cooldown starts. */
+    /**
+     * Leaving yourself, or (as owner) removing someone. Not the same act and no
+     * longer the same wait: leaving happens on the press, removing somebody
+     * else runs a cooldown they are told about.
+     */
     fun removeMember(groupId: String, memberUid: String) = launchBusy {
+        val leaving = memberUid == _uiState.value.myUid
         try {
             repository.removeGroupMember(groupId, memberUid)
             _uiState.update {
-                it.copy(message = "Removal started — everyone in the group was notified. The membership stays active through the cooldown.")
+                it.copy(
+                    message = if (leaving) {
+                        "You left the group. Everyone in it was told."
+                    } else {
+                        "Removal started — everyone in the group was told. Their membership " +
+                            "stays active through the cooldown."
+                    }
+                )
             }
         } catch (e: Exception) {
             _uiState.update { it.copy(message = friendly(e)) }
@@ -151,15 +176,5 @@ class GroupsViewModel @Inject constructor(
         else -> e.message ?: "Something went wrong."
     }
 
-    private fun serverMessage(e: retrofit2.HttpException): String? = try {
-        e.response()?.errorBody()?.string()
-            ?.let { com.google.gson.JsonParser.parseString(it) }
-            ?.takeIf { it.isJsonObject }
-            ?.asJsonObject?.get("message")
-            ?.takeIf { it.isJsonPrimitive }
-            ?.asString
-            ?.takeIf { it.isNotBlank() }
-    } catch (_: Exception) {
-        null
-    }
+    private fun serverMessage(e: retrofit2.HttpException): String? = e.serverMessage()
 }

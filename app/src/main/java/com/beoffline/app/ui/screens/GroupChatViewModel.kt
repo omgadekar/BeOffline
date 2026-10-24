@@ -4,6 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.beoffline.app.accountability.AccountabilityRepository
+import com.beoffline.app.accountability.GroupMemberDto
+import com.beoffline.app.accountability.serverMessage
 import com.beoffline.app.data.model.CachedUnlockRequest
 import com.beoffline.app.data.model.ChatMessageCache
 import com.beoffline.app.util.disambiguatedFirstNames
@@ -61,6 +63,19 @@ class GroupChatViewModel @Inject constructor(
     private val _isOwner = MutableStateFlow(false)
     val isOwner: StateFlow<Boolean> = _isOwner.asStateFlow()
 
+    /** Who is in here and who owns it — for the group-info sheet. */
+    private val _info = MutableStateFlow<GroupInfo?>(null)
+    val info: StateFlow<GroupInfo?> = _info.asStateFlow()
+
+    /**
+     * When the owner has started removing *you*, the moment it takes effect.
+     * Null otherwise. Your own leave is immediate, so this only ever describes
+     * somebody else's decision about you — which is exactly the thing that
+     * should not happen silently.
+     */
+    private val _removalAt = MutableStateFlow<Long?>(null)
+    val removalAt: StateFlow<Long?> = _removalAt.asStateFlow()
+
     /** One-line result of a report / leave / remove, shown and then dismissed. */
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
@@ -88,6 +103,12 @@ class GroupChatViewModel @Inject constructor(
                     val named = members.filter { !it.displayName.isNullOrBlank() }
                     val shortNames = disambiguatedFirstNames(named.map { it.displayName!! })
                     val byUid = named.associate { it.uid to (shortNames[it.displayName] ?: it.displayName!!) }
+
+                    _info.value = GroupInfo(group.name, group.ownerUid, members)
+                    _removalAt.value = members
+                        .firstOrNull { it.uid == myUid && it.removalPending }
+                        ?.removalEffectiveAtUtc
+                        ?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
 
                     _chatNames.value = byUid
                     _members.value = named
@@ -166,6 +187,7 @@ class GroupChatViewModel @Inject constructor(
         }
     }
 
+    /** Immediate: out of the member list, out of the chat, out of reach. */
     fun leaveGroup() = launchBusy {
         try {
             val me = myUid ?: return@launchBusy
@@ -189,15 +211,29 @@ class GroupChatViewModel @Inject constructor(
         }
     }
 
-    private fun friendly(e: Exception): String = when {
-        e is retrofit2.HttpException && e.code() == 404 -> "That message is no longer there."
-        e is retrofit2.HttpException && e.code() == 409 -> "Already done."
-        e is retrofit2.HttpException && e.code() == 403 ->
-            "You cannot approve in this group yet \u2014 a new member waits out a cooldown first."
-        e is retrofit2.HttpException && e.code() == 400 -> "The server would not take that."
-        e is java.io.IOException -> "No connection — try again when you're online."
+    /**
+     * The server explains itself in a {"message": "..."} body, and it says more
+     * than a status code can. "Already done." was this screen's whole answer to
+     * every 409, which told nobody anything.
+     */
+    private fun friendly(e: Exception): String = when (e) {
+        is retrofit2.HttpException -> e.serverMessage() ?: when (e.code()) {
+            404 -> "That is no longer there."
+            409 -> "That has already happened."
+            403 -> "You cannot approve in this group yet \u2014 a new member waits out a cooldown first."
+            400 -> "The server would not take that."
+            else -> e.message()
+        }
+        is java.io.IOException -> "No connection — try again when you're online."
         else -> e.message ?: "Something went wrong."
     }
+
+    /** A group as the info sheet shows it. */
+    data class GroupInfo(
+        val name: String,
+        val ownerUid: String,
+        val members: List<GroupMemberDto>
+    )
 
     /** What someone can say is wrong with a message. Codes match the API's fixed set. */
     enum class ReportReason(val code: String, val label: String) {

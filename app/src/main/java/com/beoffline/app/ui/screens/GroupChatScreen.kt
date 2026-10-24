@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +69,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.beoffline.app.accountability.GroupMemberDto
 import com.beoffline.app.data.model.CachedUnlockRequest
 import com.beoffline.app.data.model.ChatMessageCache
 import com.beoffline.app.ui.screens.GroupChatViewModel.ChatMember
@@ -113,6 +116,8 @@ fun GroupChatScreen(
     val mentionNames by viewModel.mentionNames.collectAsState()
     val chatNames by viewModel.chatNames.collectAsState()
     val isOwner by viewModel.isOwner.collectAsState()
+    val info by viewModel.info.collectAsState()
+    val removalAt by viewModel.removalAt.collectAsState()
     val notice by viewModel.notice.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val left by viewModel.left.collectAsState()
@@ -126,6 +131,7 @@ fun GroupChatScreen(
     var reportFor by remember { mutableStateOf<ChatMessageCache?>(null) }
     var removeFor by remember { mutableStateOf<ChatMessageCache?>(null) }
     var showLeaveConfirm by remember { mutableStateOf(false) }
+    var showInfo by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(notice) {
@@ -177,7 +183,7 @@ fun GroupChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
+                    Column(modifier = Modifier.clickable { showInfo = true }) {
                         Text(groupName, style = MaterialTheme.typography.titleMedium)
                         if (memberCount > 0) {
                             Text(
@@ -203,6 +209,13 @@ fun GroupChatScreen(
                             onDismissRequest = { menuOpen = false }
                         ) {
                             DropdownMenuItem(
+                                text = { Text("Group info", color = TextPrimary) },
+                                onClick = {
+                                    menuOpen = false
+                                    showInfo = true
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Leave this group", color = TextPrimary) },
                                 onClick = {
                                     menuOpen = false
@@ -224,6 +237,11 @@ fun GroupChatScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Your own leave is instant, so this can only be somebody else's
+            // decision about you. It used to happen with nothing on screen to
+            // say so: the group simply stayed, and then one day did not.
+            removalAt?.let { at -> RemovalBanner(at = at, now = now) }
+
             if (items.isEmpty()) {
                 EmptyChat(modifier = Modifier.weight(1f))
             } else {
@@ -331,8 +349,9 @@ fun GroupChatScreen(
     if (showLeaveConfirm) {
         ConfirmDialog(
             title = "Leave $groupName?",
-            body = "You stop seeing this conversation, and the people here stop being able to " +
-                "reach you through it. Everyone is told, and it takes effect after a cooldown.",
+            body = "Straight away: you stop seeing this conversation, and the people here stop " +
+                "being able to reach you through it. Everyone still in it is told. You can be " +
+                "invited back later.",
             confirmLabel = "Leave",
             onConfirm = {
                 showLeaveConfirm = false
@@ -340,6 +359,127 @@ fun GroupChatScreen(
             },
             onDismiss = { showLeaveConfirm = false }
         )
+    }
+
+    if (showInfo) {
+        info?.let { group ->
+            GroupInfoDialog(
+                info = group,
+                myUid = myUid,
+                chatNames = chatNames,
+                onDismiss = { showInfo = false }
+            )
+        }
+    }
+}
+
+// ── Group info ──────────────────────────────────────────────────
+
+/**
+ * Who is in here, who owns it, and since when.
+ *
+ * Owner rather than creator: ownership moves to the longest-standing member
+ * when an owner leaves, and the account that originally made the group is not
+ * recorded once that has happened. Saying "created by" would be a guess that
+ * is wrong exactly when it matters.
+ */
+@Composable
+private fun GroupInfoDialog(
+    info: GroupChatViewModel.GroupInfo,
+    myUid: String?,
+    chatNames: Map<String, String>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        containerColor = Brand800,
+        onDismissRequest = onDismiss,
+        title = { Text(info.name, color = TextPrimary) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "${info.members.size} member${if (info.members.size == 1) "" else "s"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                info.members.forEach { member ->
+                    val name = chatNames[member.uid]
+                        ?: member.displayName.firstName(fallback = "Member")
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Avatar(name = name, seed = member.uid)
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = name + if (member.uid == myUid) "  (you)" else "",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = memberDetail(member, isOwner = member.uid == info.ownerUid),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (member.removalPending) StatusDanger else TextSecondary,
+                                modifier = Modifier.padding(top = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close", color = AccentBright) }
+        }
+    )
+}
+
+/** "Owner · in since 20 Jul", or what is happening to them instead. */
+private fun memberDetail(member: GroupMemberDto, isOwner: Boolean): String {
+    if (member.removalPending) return "On the way out of this group"
+    val joined = runCatching {
+        java.time.Instant.parse(member.joinedAtUtc).toEpochMilli()
+    }.getOrNull()
+    return listOfNotNull(
+        if (isOwner) "Owner" else null,
+        joined?.let { "in since " + SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(it)) }
+    ).joinToString(" · ").ifEmpty { "Member" }
+}
+
+/** Someone else has started removing you, and it has a clock on it. */
+@Composable
+private fun RemovalBanner(at: Long, now: Long) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .background(Brand800, BoShape.Card)
+            .border(1.dp, Brand600, BoShape.Card)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                "You are being removed from this group",
+                style = MaterialTheme.typography.titleSmall,
+                color = TextPrimary
+            )
+            Text(
+                text = if (at > now) {
+                    "It takes effect in ${formatCooldownRemaining(at, now)}. Until then nothing " +
+                        "changes \u2014 or leave now from the menu."
+                } else {
+                    "It takes effect shortly."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
     }
 }
 
