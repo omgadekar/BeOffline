@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -48,6 +52,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -63,21 +69,33 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.beoffline.app.accountability.GroupMemberDto
+import com.beoffline.app.data.model.CachedUnlockRequest
 import com.beoffline.app.data.model.ChatMessageCache
 import com.beoffline.app.ui.screens.GroupChatViewModel.ChatMember
 import com.beoffline.app.ui.screens.GroupChatViewModel.ReportReason
 import com.beoffline.app.ui.theme.AccentBright
+import com.beoffline.app.ui.theme.AccentGlow
 import com.beoffline.app.ui.theme.AccentPrimary
 import com.beoffline.app.ui.theme.AccentSecondary
+import com.beoffline.app.ui.theme.AccentSurface
+import com.beoffline.app.ui.theme.BoChip
+import com.beoffline.app.ui.theme.BoPrimaryButton
+import com.beoffline.app.ui.theme.BoSecondaryButton
+import com.beoffline.app.ui.theme.BoShape
 import com.beoffline.app.ui.theme.Brand600
 import com.beoffline.app.ui.theme.Brand700
 import com.beoffline.app.ui.theme.Brand800
 import com.beoffline.app.ui.theme.Brand900
 import com.beoffline.app.ui.theme.OnAccent
+import com.beoffline.app.ui.theme.OnAccentDim
+import com.beoffline.app.ui.theme.OnAccentMention
+import com.beoffline.app.ui.theme.StatusDanger
 import com.beoffline.app.ui.theme.TextDisabled
 import com.beoffline.app.ui.theme.TextPrimary
 import com.beoffline.app.ui.theme.TextSecondary
 import com.beoffline.app.util.firstName
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -91,12 +109,15 @@ fun GroupChatScreen(
     viewModel: GroupChatViewModel = hiltViewModel()
 ) {
     val messages by viewModel.messages.collectAsState()
+    val requests by viewModel.requests.collectAsState()
     val groupName by viewModel.groupName.collectAsState()
     val memberCount by viewModel.memberCount.collectAsState()
     val members by viewModel.members.collectAsState()
     val mentionNames by viewModel.mentionNames.collectAsState()
     val chatNames by viewModel.chatNames.collectAsState()
     val isOwner by viewModel.isOwner.collectAsState()
+    val info by viewModel.info.collectAsState()
+    val removalAt by viewModel.removalAt.collectAsState()
     val notice by viewModel.notice.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val left by viewModel.left.collectAsState()
@@ -110,6 +131,7 @@ fun GroupChatScreen(
     var reportFor by remember { mutableStateOf<ChatMessageCache?>(null) }
     var removeFor by remember { mutableStateOf<ChatMessageCache?>(null) }
     var showLeaveConfirm by remember { mutableStateOf(false) }
+    var showInfo by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(notice) {
@@ -130,7 +152,18 @@ fun GroupChatScreen(
         onDispose { viewModel.setOnScreen(false) }
     }
 
-    val items = remember(messages) { buildChatItems(messages, myUid) }
+    // Ticks so a message that never got out stops claiming to be "sending…",
+    // and so a request's countdown to expiry stays honest, without either
+    // needing a new emission from the database.
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(10_000)
+            now = System.currentTimeMillis()
+        }
+    }
+
+    val items = remember(messages, requests) { buildChatItems(messages, requests, myUid) }
 
     LaunchedEffect(items.size) {
         if (items.isNotEmpty()) listState.animateScrollToItem(items.size - 1)
@@ -150,7 +183,7 @@ fun GroupChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
+                    Column(modifier = Modifier.clickable { showInfo = true }) {
                         Text(groupName, style = MaterialTheme.typography.titleMedium)
                         if (memberCount > 0) {
                             Text(
@@ -176,6 +209,13 @@ fun GroupChatScreen(
                             onDismissRequest = { menuOpen = false }
                         ) {
                             DropdownMenuItem(
+                                text = { Text("Group info", color = TextPrimary) },
+                                onClick = {
+                                    menuOpen = false
+                                    showInfo = true
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Leave this group", color = TextPrimary) },
                                 onClick = {
                                     menuOpen = false
@@ -197,6 +237,11 @@ fun GroupChatScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Your own leave is instant, so this can only be somebody else's
+            // decision about you. It used to happen with nothing on screen to
+            // say so: the group simply stayed, and then one day did not.
+            removalAt?.let { at -> RemovalBanner(at = at, now = now) }
+
             if (items.isEmpty()) {
                 EmptyChat(modifier = Modifier.weight(1f))
             } else {
@@ -217,12 +262,22 @@ fun GroupChatScreen(
                                 mentionsMe = myUid != null &&
                                     item.message.mentionedUids?.split(",")?.contains(myUid) == true,
                                 chatNames = chatNames,
+                                now = now,
                                 // Your own words, and a message still on its way
                                 // out, have no server id to report yet.
                                 onLongPress = if (item.mine || item.message.pending) {
                                     null
                                 } else {
                                     { actionsFor = item.message }
+                                },
+                                onRetry = { viewModel.retry(item.message) }
+                            )
+                            is ChatItem.Request -> RequestRow(
+                                item = item,
+                                now = now,
+                                enabled = !busy,
+                                onRespond = { approve, minutes ->
+                                    viewModel.respond(item.request, approve, minutes)
                                 }
                             )
                         }
@@ -294,8 +349,9 @@ fun GroupChatScreen(
     if (showLeaveConfirm) {
         ConfirmDialog(
             title = "Leave $groupName?",
-            body = "You stop seeing this conversation, and the people here stop being able to " +
-                "reach you through it. Everyone is told, and it takes effect after a cooldown.",
+            body = "Straight away: you stop seeing this conversation, and the people here stop " +
+                "being able to reach you through it. Everyone still in it is told. You can be " +
+                "invited back later.",
             confirmLabel = "Leave",
             onConfirm = {
                 showLeaveConfirm = false
@@ -303,6 +359,127 @@ fun GroupChatScreen(
             },
             onDismiss = { showLeaveConfirm = false }
         )
+    }
+
+    if (showInfo) {
+        info?.let { group ->
+            GroupInfoDialog(
+                info = group,
+                myUid = myUid,
+                chatNames = chatNames,
+                onDismiss = { showInfo = false }
+            )
+        }
+    }
+}
+
+// ── Group info ──────────────────────────────────────────────────
+
+/**
+ * Who is in here, who owns it, and since when.
+ *
+ * Owner rather than creator: ownership moves to the longest-standing member
+ * when an owner leaves, and the account that originally made the group is not
+ * recorded once that has happened. Saying "created by" would be a guess that
+ * is wrong exactly when it matters.
+ */
+@Composable
+private fun GroupInfoDialog(
+    info: GroupChatViewModel.GroupInfo,
+    myUid: String?,
+    chatNames: Map<String, String>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        containerColor = Brand800,
+        onDismissRequest = onDismiss,
+        title = { Text(info.name, color = TextPrimary) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "${info.members.size} member${if (info.members.size == 1) "" else "s"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                info.members.forEach { member ->
+                    val name = chatNames[member.uid]
+                        ?: member.displayName.firstName(fallback = "Member")
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Avatar(name = name, seed = member.uid)
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = name + if (member.uid == myUid) "  (you)" else "",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = memberDetail(member, isOwner = member.uid == info.ownerUid),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (member.removalPending) StatusDanger else TextSecondary,
+                                modifier = Modifier.padding(top = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close", color = AccentBright) }
+        }
+    )
+}
+
+/** "Owner · in since 20 Jul", or what is happening to them instead. */
+private fun memberDetail(member: GroupMemberDto, isOwner: Boolean): String {
+    if (member.removalPending) return "On the way out of this group"
+    val joined = runCatching {
+        java.time.Instant.parse(member.joinedAtUtc).toEpochMilli()
+    }.getOrNull()
+    return listOfNotNull(
+        if (isOwner) "Owner" else null,
+        joined?.let { "in since " + SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(it)) }
+    ).joinToString(" · ").ifEmpty { "Member" }
+}
+
+/** Someone else has started removing you, and it has a clock on it. */
+@Composable
+private fun RemovalBanner(at: Long, now: Long) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .background(Brand800, BoShape.Card)
+            .border(1.dp, Brand600, BoShape.Card)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                "You are being removed from this group",
+                style = MaterialTheme.typography.titleSmall,
+                color = TextPrimary
+            )
+            Text(
+                text = if (at > now) {
+                    "It takes effect in ${formatCooldownRemaining(at, now)}. Until then nothing " +
+                        "changes \u2014 or leave now from the menu."
+                } else {
+                    "It takes effect shortly."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
     }
 }
 
@@ -405,32 +582,61 @@ private fun DialogAction(label: String, enabled: Boolean = true, onClick: () -> 
 
 private sealed interface ChatItem {
     data class Day(val label: String) : ChatItem
+
     /** [showHeader] = first message of a run from this sender (or after a day break). */
     data class Msg(val message: ChatMessageCache, val mine: Boolean, val showHeader: Boolean) : ChatItem
+
+    /** An unlock request raised in this group. [mine] = you are the one asking. */
+    data class Request(val request: CachedUnlockRequest, val mine: Boolean) : ChatItem
 }
 
 private fun keyFor(item: ChatItem): String = when (item) {
     is ChatItem.Day -> "day-${item.label}"
     is ChatItem.Msg -> item.message.id
+    is ChatItem.Request -> "req-${item.request.id}"
 }
 
-/** Flattens the message list into day dividers + grouped bubbles (messages are ascending). */
-private fun buildChatItems(messages: List<ChatMessageCache>, myUid: String?): List<ChatItem> {
+/**
+ * Flattens messages and requests into one ascending timeline with day
+ * dividers.
+ *
+ * A request is part of the conversation, not an overlay on it: it lands where
+ * it was asked, between the messages either side of it, the way a payment
+ * request does in a messaging app. It also breaks a run of bubbles, so the
+ * next message from the same person gets its name back.
+ */
+private fun buildChatItems(
+    messages: List<ChatMessageCache>,
+    requests: List<CachedUnlockRequest>,
+    myUid: String?
+): List<ChatItem> {
+    val timeline = (
+        messages.map { it.sentAtUtc to (it as Any) } +
+            requests.map { it.requestedAtUtc to (it as Any) }
+        ).sortedBy { it.first }
+
     val items = mutableListOf<ChatItem>()
     var lastDay: Long? = null
     var lastSender: String? = null
-    for (message in messages) {
-        val day = dayStamp(message.sentAtUtc)
+    for ((at, entry) in timeline) {
+        val day = dayStamp(at)
         val newDay = day != lastDay
         if (newDay) {
-            items.add(ChatItem.Day(dayLabel(message.sentAtUtc)))
+            items.add(ChatItem.Day(dayLabel(at)))
             lastSender = null
         }
-        val mine = message.senderUid == myUid
-        val showHeader = newDay || message.senderUid != lastSender
-        items.add(ChatItem.Msg(message, mine, showHeader))
+        when (entry) {
+            is ChatMessageCache -> {
+                val mine = entry.senderUid == myUid
+                items.add(ChatItem.Msg(entry, mine, newDay || entry.senderUid != lastSender))
+                lastSender = entry.senderUid
+            }
+            is CachedUnlockRequest -> {
+                items.add(ChatItem.Request(entry, entry.direction == "OUTGOING"))
+                lastSender = null
+            }
+        }
         lastDay = day
-        lastSender = message.senderUid
     }
     return items
 }
@@ -457,8 +663,10 @@ private fun MessageRow(
     mentionNames: List<String>,
     mentionsMe: Boolean,
     chatNames: Map<String, String>,
+    now: Long,
     /** Null when there is nothing to offer for this message. */
-    onLongPress: (() -> Unit)? = null
+    onLongPress: (() -> Unit)? = null,
+    onRetry: () -> Unit = {}
 ) {
     val message = item.message
     // First name only. A member who has since left the group isn't in the map,
@@ -468,8 +676,8 @@ private fun MessageRow(
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Bubble(
                 message = message, mine = true, senderName = senderName,
-                mentionNames = mentionNames, mentionsMe = false,
-                onLongPress = onLongPress
+                mentionNames = mentionNames, mentionsMe = false, now = now,
+                onLongPress = onLongPress, onRetry = onRetry
             )
         }
     } else {
@@ -483,12 +691,19 @@ private fun MessageRow(
             Bubble(
                 message = message, mine = false, showName = item.showHeader,
                 senderName = senderName, mentionNames = mentionNames, mentionsMe = mentionsMe,
-                onLongPress = onLongPress
+                now = now, onLongPress = onLongPress, onRetry = onRetry
             )
         }
     }
 }
 
+/**
+ * Your own bubble is a filled clay surface, so everything inside it has to be
+ * written for clay. It used to carry the same near-black body text and grey
+ * timestamp as a received bubble, which on this fill is close to invisible.
+ * The mention colour went the wrong way too: [AccentBright] is a dark clay,
+ * which on a clay fill is barely a highlight at all.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Bubble(
@@ -498,8 +713,12 @@ private fun Bubble(
     showName: Boolean = false,
     mentionNames: List<String>,
     mentionsMe: Boolean,
-    onLongPress: (() -> Unit)? = null
+    now: Long,
+    onLongPress: (() -> Unit)? = null,
+    onRetry: () -> Unit = {}
 ) {
+    // A send that has been in progress for a minute is not in progress.
+    val stuck = message.pending && now - message.sentAtUtc > STUCK_AFTER_MS
     val shape = RoundedCornerShape(
         topStart = 16.dp, topEnd = 16.dp,
         bottomStart = if (mine) 16.dp else 5.dp,
@@ -509,11 +728,12 @@ private fun Bubble(
         .widthIn(max = 300.dp)
         .background(color = if (mine) AccentPrimary else Brand800, shape = shape)
     if (mentionsMe) bubble = bubble.border(1.5.dp, AccentSecondary, shape)
-    if (onLongPress != null) {
+    if (onLongPress != null || stuck) {
         bubble = bubble.combinedClickable(
-            onClick = {},
+            onClick = { if (stuck) onRetry() },
+            onClickLabel = if (stuck) "Send again" else null,
             onLongClick = onLongPress,
-            onLongClickLabel = "Message options"
+            onLongClickLabel = if (onLongPress != null) "Message options" else null
         )
     }
 
@@ -529,19 +749,210 @@ private fun Bubble(
                 fontWeight = FontWeight.SemiBold
             )
         }
-        val mentionColor = if (mine) AccentBright else AccentPrimary
         Text(
-            annotateMentions(message.body, mentionNames, mentionColor),
+            annotateMentions(
+                message.body,
+                mentionNames,
+                if (mine) OnAccentMention else AccentPrimary
+            ),
             style = MaterialTheme.typography.bodyMedium,
-            color = TextPrimary
+            color = if (mine) OnAccent else TextPrimary
         )
         Text(
-            if (message.pending) "sending…" else timeText(message.sentAtUtc),
+            text = when {
+                stuck -> "Not sent · tap to try again"
+                message.pending -> "sending…"
+                else -> timeText(message.sentAtUtc)
+            },
             style = MaterialTheme.typography.labelSmall,
-            color = TextSecondary,
+            color = if (mine) OnAccentDim else TextSecondary,
             modifier = Modifier.align(Alignment.End)
         )
     }
+}
+
+/** How long a send may sit on "sending" before it is called what it is. */
+private const val STUCK_AFTER_MS = 60_000L
+
+// ── Unlock requests, in the conversation ─────────────────────────────
+// A group request is addressed to whoever is around rather than to one named
+// person, and the chat is where "whoever is around" already is. So it is shown
+// here, answerable in place, the way a payment request sits in a thread — and
+// it is deliberately absent from the People tab, which carries 1:1 requests
+// only. The same request offered in two places invites two people to answer it.
+
+@Composable
+private fun RequestRow(
+    item: ChatItem.Request,
+    now: Long,
+    enabled: Boolean,
+    onRespond: (approve: Boolean, minutes: Int?) -> Unit
+) {
+    val request = item.request
+    if (item.mine) {
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            RequestCard(request, now, mine = true, enabled = enabled, onRespond = onRespond)
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            // Seeded by name, not by request id: the same person keeps the
+            // same colour across everything they ask for.
+            Avatar(
+                name = request.requesterName.firstName(fallback = "Member"),
+                seed = request.requesterName ?: request.id
+            )
+            Spacer(Modifier.width(8.dp))
+            RequestCard(request, now, mine = false, enabled = enabled, onRespond = onRespond)
+        }
+    }
+}
+
+@Composable
+private fun RequestCard(
+    request: CachedUnlockRequest,
+    now: Long,
+    mine: Boolean,
+    enabled: Boolean,
+    onRespond: (approve: Boolean, minutes: Int?) -> Unit
+) {
+    // "Pending" in the cache can mean "pending until it quietly expired a
+    // while ago" — the server resolves that lazily, and until it does the
+    // honest thing to show is that the window has closed.
+    val lapsed = request.expiresAtUtc?.let { it <= now } == true
+    val open = request.status in setOf("Pending", "Queued") && !lapsed
+    val actionable = open && !mine && request.status == "Pending"
+    var minutes by remember(request.id) { mutableIntStateOf(15) }
+
+    Column(
+        modifier = Modifier
+            .widthIn(max = 320.dp)
+            .background(if (open) AccentSurface else Brand800, BoShape.Card)
+            .border(1.dp, if (open) AccentGlow else Brand600, BoShape.Card)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Outlined.LockOpen,
+                contentDescription = null,
+                tint = if (open) AccentSecondary else TextDisabled,
+                modifier = Modifier.size(13.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = if (open) "UNLOCK REQUEST" else "UNLOCK REQUEST · CLOSED",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (open) AccentSecondary else TextDisabled
+            )
+        }
+
+        Text(
+            text = if (mine) {
+                "You asked to open ${request.appLabel}"
+            } else {
+                "${request.requesterName.firstName()} asks to open ${request.appLabel}"
+            },
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextPrimary,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+
+        RequestStatusLine(request, lapsed, open, mine, now)
+
+        if (actionable) {
+            Text(
+                "Grant time",
+                style = MaterialTheme.typography.labelMedium,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            Spacer(Modifier.height(7.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(5, 15, 30, 60).forEach { option ->
+                    BoChip(
+                        label = "${option}m",
+                        selected = option == minutes,
+                        onClick = { if (enabled) minutes = option },
+                        shape = BoShape.Pill
+                    )
+                }
+            }
+            Spacer(Modifier.height(11.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BoPrimaryButton(
+                    text = "Approve ${minutes}m",
+                    onClick = { onRespond(true, minutes) },
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f)
+                )
+                BoSecondaryButton(
+                    text = "Deny",
+                    onClick = { onRespond(false, null) },
+                    enabled = enabled
+                )
+            }
+        }
+
+        Text(
+            timeText(request.requestedAtUtc),
+            style = MaterialTheme.typography.labelSmall,
+            color = TextDisabled,
+            modifier = Modifier.align(Alignment.End).padding(top = 6.dp)
+        )
+    }
+}
+
+/** The one line under the ask: what happened to it, or how long is left. */
+@Composable
+private fun RequestStatusLine(
+    request: CachedUnlockRequest,
+    lapsed: Boolean,
+    open: Boolean,
+    mine: Boolean,
+    now: Long
+) {
+    val resolver = request.resolvedByName?.firstName(fallback = "a member")
+    val text = when {
+        request.status == "Queued" && open -> "Waiting to reach the group…"
+        request.status == "Approved" -> listOfNotNull(
+            "Approved",
+            request.grantedUntilUtc
+                ?.takeIf { it > now }
+                ?.let { "open until ${timeText(it)}" },
+            resolver?.let { "by $it" }
+        ).joinToString(" · ")
+        request.status == "Denied" -> listOfNotNull("Denied", resolver?.let { "by $it" }).joinToString(" · ")
+        request.status == "Expired" || lapsed -> "Nobody answered in time"
+        request.status == "Cancelled" -> "Withdrawn"
+        mine -> "Waiting on the group"
+        else -> remainingText(request.expiresAtUtc, now)
+            ?.let { "Whoever answers first decides · $it left" }
+            ?: "Whoever answers first decides"
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = when {
+            request.status == "Approved" -> AccentSecondary
+            request.status == "Expired" || lapsed -> StatusDanger
+            else -> TextSecondary
+        },
+        modifier = Modifier.padding(top = 3.dp)
+    )
+}
+
+/** Coarse time left, e.g. "12m". Null once there is none. */
+private fun remainingText(expiresAtUtc: Long?, now: Long): String? {
+    val left = (expiresAtUtc ?: return null) - now
+    if (left <= 0) return null
+    val minutes = left / 60_000
+    return if (minutes >= 1) "${minutes}m" else "under a minute"
 }
 
 @Composable

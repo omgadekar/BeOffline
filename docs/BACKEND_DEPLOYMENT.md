@@ -9,7 +9,9 @@ artifact (2026-07-20), which is what the live deployment was actually built from
 below matches it.
 
 **Scope.** This deploys the backend only. The Android work ships through Play — see
-`docs/RELEASE_BUILD.md`.
+`docs/RELEASE_BUILD.md`. For running the API as a container instead of under systemd — same
+VM, same nginx, same Postgres, but a deploy becomes a tag and a rollback becomes the previous
+tag — see `docs/BACKEND_DOCKER.md`.
 
 ---
 
@@ -77,6 +79,49 @@ ssh ubuntu@<VM_IP> "grep -A2 Accountability /opt/beoffline-api/appsettings.Produ
 ```
 
 If that returns nothing, the key is absent and the committed `12` is in force.
+
+### Group limits need no production change
+
+`Accountability:GroupMaxMembers` (10) and `Accountability:GroupsPerUserMax` (10) are both
+defaulted in code and listed in the committed `appsettings.json`, so a deploy of the binary is
+all it takes to put the per-user cap in force. There was no cap on groups per user before it;
+the member limit has always been 10 and is unchanged.
+
+Only add either to `appsettings.Production.json` to run a *different* number. ASP.NET merges
+the production file key by key rather than replacing the whole `Accountability` object, so
+adding one key there leaves the rest alone:
+
+```json
+"Accountability": {
+  "ApproverActivationCooldownHours": 0,
+  "GroupsPerUserMax": 25
+}
+```
+
+Both are read per request, but the file is only loaded at start — restart after editing.
+
+### Leaving a group is immediate; removing somebody is not
+
+These used to share one mechanic and a cooldown. They no longer do, and the
+split is deliberate:
+
+| Act | Effect |
+|---|---|
+| Leaving a group yourself | **Immediate.** Out of the member list, the chat and reach. An owner who leaves hands the group to the longest-standing member who stayed. Works even while an owner is part-way through removing you. |
+| An owner removing somebody else | Unchanged — `RemovalCooldownHours`, with everyone told at once. |
+| 1:1 partner removal | Unchanged — same cooldown. That relationship is the accountability contract itself. |
+
+The old behaviour failed the case it most has to handle: someone in a group
+with a person they want away from, held in the conversation for another twelve
+hours. Play's user-generated-content policy expects a way out of a chat that
+works when it is pressed. The cooldown also bought little here — group
+membership grants approvers, it does not enforce anything, so leaving one has
+never unlocked a thing. The friction that matters stayed where it matters: an
+owner still cannot quietly delete the people holding them to something.
+
+**This needs the redeploy to take effect.** Until the binary is updated, leaving
+still runs the cooldown, and the app's new copy will promise something the
+server does not yet do.
 
 ### Secrets never leave the VM
 

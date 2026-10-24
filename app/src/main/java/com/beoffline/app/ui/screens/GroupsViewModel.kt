@@ -5,19 +5,29 @@ import androidx.lifecycle.viewModelScope
 import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.accountability.AuthManager
 import com.beoffline.app.accountability.GroupMemberDto
+import com.beoffline.app.accountability.serverMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import javax.inject.Inject
 
 data class GroupUi(
     val groupId: String,
     val name: String,
     val ownerUid: String,
-    val members: List<GroupMemberDto>
+    val members: List<GroupMemberDto>,
+    /** Unlock requests in this group still waiting on an answer. */
+    val waiting: Int = 0,
+    /**
+     * When the owner's removal of *you* takes effect. Null normally — leaving
+     * of your own accord is immediate and the group simply goes.
+     */
+    val leavingAt: Long? = null
 )
 
 data class GroupsUiState(
@@ -48,12 +58,31 @@ class GroupsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            repository.groups.collect { groups ->
-                _uiState.update { state ->
-                    state.copy(groups = groups.map {
-                        GroupUi(it.groupId, it.name, it.ownerUid, repository.membersOf(it))
-                    })
+            combine(repository.groups, repository.incomingPendingGroup) { groups, waiting ->
+                val now = System.currentTimeMillis()
+                // A row the server has not got round to expiring yet is not
+                // something to put a badge on.
+                val byGroup = waiting
+                    .filter { it.expiresAtUtc == null || it.expiresAtUtc > now }
+                    .groupingBy { it.groupId }
+                    .eachCount()
+                val me = _uiState.value.myUid
+                groups.map {
+                    val members = repository.membersOf(it)
+                    GroupUi(
+                        groupId = it.groupId,
+                        name = it.name,
+                        ownerUid = it.ownerUid,
+                        members = members,
+                        waiting = byGroup[it.groupId] ?: 0,
+                        leavingAt = members
+                            .firstOrNull { m -> m.uid == me && m.removalPending }
+                            ?.removalEffectiveAtUtc
+                            ?.let { at -> runCatching { Instant.parse(at).toEpochMilli() }.getOrNull() }
+                    )
                 }
+            }.collect { groups ->
+                _uiState.update { it.copy(groups = groups) }
             }
         }
     }
@@ -93,12 +122,24 @@ class GroupsViewModel @Inject constructor(
         }
     }
 
-    /** Leaving yourself, or (as owner) removing someone — either way the cooldown starts. */
+    /**
+     * Leaving yourself, or (as owner) removing someone. Not the same act and no
+     * longer the same wait: leaving happens on the press, removing somebody
+     * else runs a cooldown they are told about.
+     */
     fun removeMember(groupId: String, memberUid: String) = launchBusy {
+        val leaving = memberUid == _uiState.value.myUid
         try {
             repository.removeGroupMember(groupId, memberUid)
             _uiState.update {
-                it.copy(message = "Removal started — everyone in the group was notified. The membership stays active through the cooldown.")
+                it.copy(
+                    message = if (leaving) {
+                        "You left the group. Everyone in it was told."
+                    } else {
+                        "Removal started — everyone in the group was told. Their membership " +
+                            "stays active through the cooldown."
+                    }
+                )
             }
         } catch (e: Exception) {
             _uiState.update { it.copy(message = friendly(e)) }
@@ -118,12 +159,22 @@ class GroupsViewModel @Inject constructor(
         }
     }
 
-    private fun friendly(e: Exception): String = when {
-        e is retrofit2.HttpException && e.code() == 404 -> "Invalid or expired code."
-        e is retrofit2.HttpException && e.code() == 409 -> "Not possible — the group may be full, or this is already done."
-        e is retrofit2.HttpException && e.code() == 403 -> "Not allowed."
-        e is retrofit2.HttpException && e.code() == 400 -> "The server rejected that — check the input."
-        e is java.io.IOException -> "No connection — try again when you're online."
+    /**
+     * The server says why in a {"message": "..."} body, and it says it better
+     * than a status code can: which limit was hit, how many of what, what to do
+     * instead. Prefer it, and keep the generic lines for when it is absent.
+     */
+    private fun friendly(e: Exception): String = when (e) {
+        is retrofit2.HttpException -> serverMessage(e) ?: when (e.code()) {
+            404 -> "Invalid or expired code."
+            409 -> "Not possible — the group may be full, or this is already done."
+            403 -> "Not allowed."
+            400 -> "The server rejected that — check the input."
+            else -> e.message()
+        }
+        is java.io.IOException -> "No connection — try again when you're online."
         else -> e.message ?: "Something went wrong."
     }
+
+    private fun serverMessage(e: retrofit2.HttpException): String? = e.serverMessage()
 }

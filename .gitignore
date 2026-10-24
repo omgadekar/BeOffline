@@ -14,3 +14,11 @@ local.properties
 # Local scratch output (upscaled images, working files) - never shipped
 output/
 tmp/
+
+# Marketing video: only the rendered launch video and its README preview ship.
+# The Remotion project, source audio and working files stay local.
+docs/marketing-video/*
+!docs/marketing-video/assets/
+docs/marketing-video/assets/*
+!docs/marketing-video/assets/preview.gif
+!docs/marketing-video/assets/beoffline-launch.mp4

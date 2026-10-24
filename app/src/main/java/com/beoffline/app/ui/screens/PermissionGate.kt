@@ -1,9 +1,5 @@
 package com.beoffline.app.ui.screens
 
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,19 +78,18 @@ fun PermissionGate(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val notificationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { onRefresh() }
+    // Not a bare launcher: once the dialog has been refused twice Android
+    // stops drawing it and launch() returns denied in silence, which turned
+    // this row's Allow into a button that did nothing at all.
+    val notifications = rememberNotificationPermissionRequest(
+        openSettings = onOpenNotificationSettings,
+        onResult = { onRefresh() }
+    )
 
     fun request(need: PermissionNeed) {
         when (need) {
             PermissionNeed.Battery -> onRequestBattery()
-            PermissionNeed.Notifications ->
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else {
-                    onOpenNotificationSettings()
-                }
+            PermissionNeed.Notifications -> notifications.onTap()
             // An empty list means "consent only" — MainActivity launches the
             // system dialog and starts nothing, because there is nothing to
             // start until the block is saved.

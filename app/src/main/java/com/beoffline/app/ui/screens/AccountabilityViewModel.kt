@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.beoffline.app.accountability.AccountabilityRepository
 import com.beoffline.app.accountability.AuthManager
 import com.beoffline.app.accountability.RealtimeClient
+import com.beoffline.app.background.BackgroundProtectionManager
 import com.beoffline.app.data.model.CachedUnlockRequest
 import com.beoffline.app.data.model.Partner
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,6 +25,13 @@ data class AccountabilityUiState(
     val incomingPending: List<CachedUnlockRequest> = emptyList(),
     val recentRequests: List<CachedUnlockRequest> = emptyList(),
     val inviteCode: String? = null,
+    /**
+     * Whether Android will actually deliver what this tab depends on. Both
+     * default to true so the nudge cannot flash on screen before the first
+     * real check has run.
+     */
+    val notificationsOn: Boolean = true,
+    val batteryUnrestricted: Boolean = true,
     val busy: Boolean = false,
     val message: String? = null
 )
@@ -32,7 +40,8 @@ data class AccountabilityUiState(
 class AccountabilityViewModel @Inject constructor(
     private val authManager: AuthManager,
     private val repository: AccountabilityRepository,
-    private val realtimeClient: RealtimeClient
+    private val realtimeClient: RealtimeClient,
+    private val protection: BackgroundProtectionManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountabilityUiState())
@@ -65,6 +74,24 @@ class AccountabilityViewModel @Inject constructor(
     fun checkConfiguration(context: Context) {
         _uiState.update { it.copy(googleConfigured = authManager.isGoogleSignInConfigured(context)) }
     }
+
+    /**
+     * Re-read whether Android will deliver. Both of these are granted outside
+     * the app and come back without telling us, so this runs on every resume.
+     */
+    fun refreshDelivery() {
+        val status = protection.getStatus()
+        _uiState.update {
+            it.copy(
+                notificationsOn = status.notificationsEnabled,
+                batteryUnrestricted = status.batteryOptimizationIgnored
+            )
+        }
+    }
+
+    fun requestBatteryExemption() = protection.openBatteryOptimizationFlow()
+
+    fun openNotificationSettings() = protection.openNotificationSettings()
 
     /** [activityContext] must be an Activity (Credential Manager shows UI). */
     fun signIn(activityContext: Context) = launchBusy {

@@ -79,7 +79,10 @@ fun MainShell(
                     onRequestVpn = onRequestVpn,
                     onFixLock = onShowDisclosure
                 )
-                ShellTab.People -> AccountabilityScreen(onOpenChat = onOpenChat)
+                ShellTab.People -> AccountabilityScreen(
+                    onOpenChat = onOpenChat,
+                    onOpenSettings = onOpenSettings
+                )
             }
         }
         BoBottomNav(selected = selectedTab, onSelect = onSelectTab)

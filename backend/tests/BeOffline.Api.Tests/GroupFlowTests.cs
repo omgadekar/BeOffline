@@ -169,7 +169,7 @@ public sealed class GroupFlowTests : IClassFixture<TestAppFactory>
     }
 
     [Fact]
-    public async Task LeaveGroup_cooldown_notifiesEveryone_thenSweepFinalizes_andTransfersOwnership()
+    public async Task LeaveGroup_isImmediate_transfersOwnership_andTellsEveryone()
     {
         var owner = _factory.ClientFor("l-owner1");
         var heir = _factory.ClientFor("l-heir1");
@@ -179,41 +179,110 @@ public sealed class GroupFlowTests : IClassFixture<TestAppFactory>
         await JoinAsync(owner, heir, group.Id);
         await JoinAsync(owner, third, group.Id);
 
-        // Owner starts leaving: not instant, everyone else is told immediately.
+        // Leaving takes effect on the call, not on a cooldown: somebody who
+        // wants out of a conversation gets out of it when they press the
+        // button.
         var leaveResponse = await owner.DeleteAsync($"/api/groups/{group.Id}/members/l-owner1");
         leaveResponse.EnsureSuccessStatusCode();
-        var during = await leaveResponse.Content.ReadFromJsonAsync<GroupDto>();
-        var leaving = during!.Members.Single(m => m.Uid == "l-owner1");
-        Assert.True(leaving.RemovalPending);
-        Assert.True(leaving.RemovalEffectiveAtUtc > DateTime.UtcNow.AddHours(11));
-        Assert.Contains(_factory.Push.For("l-heir1"), s => s.Type == "GROUP_MEMBER_REMOVAL_STARTED");
-        Assert.Contains(_factory.Push.For("l-third1"), s => s.Type == "GROUP_MEMBER_REMOVAL_STARTED");
 
-        // Double-leave → conflict.
-        Assert.Equal(HttpStatusCode.Conflict,
-            (await owner.DeleteAsync($"/api/groups/{group.Id}/members/l-owner1")).StatusCode);
-
-        // Non-owner cannot remove someone else.
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await heir.DeleteAsync($"/api/groups/{group.Id}/members/l-third1")).StatusCode);
-
-        // Fast-forward past cooldown; sweep finalizes and hands the group over.
-        _factory.WithDb(db =>
-        {
-            var m = db.GroupMembers.Single(x => x.GroupId == group.Id && x.Uid == "l-owner1");
-            m.RemovalEffectiveAtUtc = DateTime.UtcNow.AddMinutes(-1);
-        });
-        await _factory.RunSweepOnceAsync();
+        var after = await leaveResponse.Content.ReadFromJsonAsync<GroupDto>();
+        Assert.DoesNotContain(after!.Members, m => m.Uid == "l-owner1");
+        // Longest-standing member who stayed inherits it, there and then.
+        Assert.Equal("l-heir1", after.OwnerUid);
 
         _factory.WithDb(db =>
         {
             Assert.Equal(GroupMemberStatus.Removed,
                 db.GroupMembers.AsNoTracking().Single(x => x.GroupId == group.Id && x.Uid == "l-owner1").Status);
-            // Longest-standing remaining member inherits the group.
             Assert.Equal("l-heir1", db.Groups.AsNoTracking().Single(g => g.Id == group.Id).OwnerUid);
         });
+
+        // Everyone still in it is told, and told that they left rather than
+        // that a removal has started.
         Assert.Contains(_factory.Push.For("l-heir1"), s => s.Type == "GROUP_MEMBER_LEFT");
-        Assert.Contains(_factory.Push.For("l-owner1"), s => s.Type == "GROUP_MEMBER_LEFT");
+        Assert.Contains(_factory.Push.For("l-third1"), s => s.Type == "GROUP_MEMBER_LEFT");
+        Assert.DoesNotContain(_factory.Push.For("l-heir1"), s => s.Type == "GROUP_MEMBER_REMOVAL_STARTED");
+
+        // The group is gone from their list, and the chat with it.
+        var mine = await owner.GetFromJsonAsync<List<GroupDto>>("/api/groups");
+        Assert.DoesNotContain(mine!, g => g.Id == group.Id);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await owner.GetAsync($"/api/chat/groups/{group.Id}/messages")).StatusCode);
+
+        // And leaving again is a 404, not a conflict — there is no membership.
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await owner.DeleteAsync($"/api/groups/{group.Id}/members/l-owner1")).StatusCode);
+    }
+
+    [Fact]
+    public async Task RemovingSomeoneElse_stillWaitsOutTheCooldown_thenSweepFinalizes()
+    {
+        var owner = _factory.ClientFor("r-owner1");
+        var member = _factory.ClientFor("r-member1");
+        var third = _factory.ClientFor("r-third1");
+
+        var group = await CreateGroupAsync(owner, "Friction");
+        await JoinAsync(owner, member, group.Id);
+        await JoinAsync(owner, third, group.Id);
+
+        // The friction belongs here: an owner cannot quietly delete the people
+        // holding them to something, and the person going keeps their access
+        // while the cooldown runs.
+        var response = await owner.DeleteAsync($"/api/groups/{group.Id}/members/r-member1");
+        response.EnsureSuccessStatusCode();
+        var during = await response.Content.ReadFromJsonAsync<GroupDto>();
+        var leaving = during!.Members.Single(m => m.Uid == "r-member1");
+        Assert.True(leaving.RemovalPending);
+        Assert.True(leaving.RemovalEffectiveAtUtc > DateTime.UtcNow.AddHours(11));
+        Assert.Contains(_factory.Push.For("r-member1"), s => s.Type == "GROUP_MEMBER_REMOVAL_STARTED");
+        Assert.Contains(_factory.Push.For("r-third1"), s => s.Type == "GROUP_MEMBER_REMOVAL_STARTED");
+
+        // Removing the same person twice is a conflict, not a second cooldown.
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await owner.DeleteAsync($"/api/groups/{group.Id}/members/r-member1")).StatusCode);
+
+        // A member who is not the owner cannot remove anybody else.
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await third.DeleteAsync($"/api/groups/{group.Id}/members/r-member1")).StatusCode);
+
+        // Fast-forward past the cooldown; the sweep finalizes it.
+        _factory.WithDb(db =>
+        {
+            var m = db.GroupMembers.Single(x => x.GroupId == group.Id && x.Uid == "r-member1");
+            m.RemovalEffectiveAtUtc = DateTime.UtcNow.AddMinutes(-1);
+        });
+        await _factory.RunSweepOnceAsync();
+
+        _factory.WithDb(db =>
+            Assert.Equal(GroupMemberStatus.Removed,
+                db.GroupMembers.AsNoTracking().Single(x => x.GroupId == group.Id && x.Uid == "r-member1").Status));
+        Assert.Contains(_factory.Push.For("r-third1"), s => s.Type == "GROUP_MEMBER_LEFT");
+    }
+
+    [Fact]
+    public async Task SomeoneBeingRemoved_canStillLeaveImmediately()
+    {
+        var owner = _factory.ClientFor("x-owner1");
+        var member = _factory.ClientFor("x-member1");
+        var third = _factory.ClientFor("x-third1");
+
+        var group = await CreateGroupAsync(owner, "Not your timing");
+        await JoinAsync(owner, member, group.Id);
+        await JoinAsync(owner, third, group.Id);
+
+        (await owner.DeleteAsync($"/api/groups/{group.Id}/members/x-member1")).EnsureSuccessStatusCode();
+
+        // A pending removal must not hold somebody in a conversation they want
+        // out of — otherwise the person they want away from decides when they
+        // get to go.
+        var leave = await member.DeleteAsync($"/api/groups/{group.Id}/members/x-member1");
+        leave.EnsureSuccessStatusCode();
+
+        _factory.WithDb(db =>
+            Assert.Equal(GroupMemberStatus.Removed,
+                db.GroupMembers.AsNoTracking().Single(x => x.GroupId == group.Id && x.Uid == "x-member1").Status));
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await member.GetAsync($"/api/chat/groups/{group.Id}/messages")).StatusCode);
     }
 
     [Fact]

@@ -1,20 +1,53 @@
-# Local dev database for the accountability API.
-#   docker compose up -d
-#   dotnet run --project src/BeOffline.Api
-# (appsettings.Development.json points at this instance; production runs on
-# the OCI VM's existing Postgres.)
-services:
-  postgres:
-    image: postgres:16
-    container_name: beoffline-postgres
-    environment:
-      POSTGRES_DB: beoffline
-      POSTGRES_USER: beoffline
-      POSTGRES_PASSWORD: beoffline_dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - beoffline-pgdata:/var/lib/postgresql/data
+# BeOffline API in a container, as a drop-in for the systemd unit.
+#
+# Deliberately the smallest possible change from the deployment that exists.
+# Postgres stays on the host, nginx stays on the host, the Cloudflare origin
+# certificate stays where it is, and Kestrel is still reachable only on
+# 127.0.0.1:5080. The only thing that moves is how the app process is started
+# and how it is rolled back.
+#
+# See docs/BACKEND_DOCKER.md.
 
-volumes:
-  beoffline-pgdata:
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: beoffline-api:${TAG:-latest}
+    container_name: beoffline-api
+    restart: unless-stopped
+
+    # The host's own network stack, which is what makes this a drop-in.
+    #
+    # On a bridge network the container gets its own stack, and "localhost" in
+    # the Postgres connection string would then mean the container — so the
+    # connection string, Postgres's listen_addresses and pg_hba.conf would all
+    # have to change for a deployment that is otherwise unchanged. Sharing the
+    # host's stack means localhost still means the host, Postgres needs nothing,
+    # and nginx's proxy_pass keeps pointing at the same address.
+    #
+    # The cost is that the container does not get its own port namespace, which
+    # on a VM running one application is not much of a cost. BACKEND_DOCKER.md
+    # has the bridge-network variant if that changes.
+    network_mode: host
+
+    volumes:
+      # Production config and secrets stay on the VM, owned by the VM, mounted
+      # read-only. Nothing secret is ever baked into the image.
+      - /opt/beoffline-api/appsettings.Production.json:/app/appsettings.Production.json:ro
+      - /etc/beoffline:/etc/beoffline:ro
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Overrides the image's default of http://+:5080. With the host's network
+      # stack, binding every interface would publish the API straight to the
+      # internet — Docker writes its own iptables rules and does not consult
+      # ufw. Loopback keeps nginx as the only way in, exactly as today.
+      ASPNETCORE_URLS: http://127.0.0.1:5080
+
+    # journald keeps `journalctl` working the way the runbook already describes,
+    # rather than leaving logs only in `docker logs`.
+    logging:
+      driver: journald
+      options:
+        tag: beoffline-api

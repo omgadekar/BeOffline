@@ -31,8 +31,34 @@ interface UnlockRequestCacheDao {
     @Query("SELECT * FROM unlock_request_cache ORDER BY requestedAtUtc DESC")
     fun getAll(): Flow<List<CachedUnlockRequest>>
 
+    /**
+     * 1:1 partner history only. Group-scoped requests are answered inside the
+     * group's own chat, so they are deliberately absent from the People tab —
+     * the same request listed in two places invites two people to answer it.
+     */
+    @Query("SELECT * FROM unlock_request_cache WHERE groupId IS NULL ORDER BY requestedAtUtc DESC")
+    fun getAllDirect(): Flow<List<CachedUnlockRequest>>
+
     @Query("SELECT * FROM unlock_request_cache WHERE direction = 'INCOMING' AND status = 'Pending' ORDER BY requestedAtUtc DESC")
     fun getIncomingPending(): Flow<List<CachedUnlockRequest>>
+
+    /** Waiting on you, 1:1 only — the cards at the top of the People tab. */
+    @Query(
+        "SELECT * FROM unlock_request_cache WHERE direction = 'INCOMING' AND status = 'Pending' " +
+            "AND groupId IS NULL ORDER BY requestedAtUtc DESC"
+    )
+    fun getIncomingPendingDirect(): Flow<List<CachedUnlockRequest>>
+
+    /** Group requests still waiting on somebody — the count on a group row. */
+    @Query(
+        "SELECT * FROM unlock_request_cache WHERE direction = 'INCOMING' AND status = 'Pending' " +
+            "AND groupId IS NOT NULL"
+    )
+    fun getIncomingPendingGroup(): Flow<List<CachedUnlockRequest>>
+
+    /** Every request raised in one group, oldest first — the chat timeline. */
+    @Query("SELECT * FROM unlock_request_cache WHERE groupId = :groupId ORDER BY requestedAtUtc ASC")
+    fun forGroup(groupId: String): Flow<List<CachedUnlockRequest>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(request: CachedUnlockRequest)
@@ -103,6 +129,9 @@ interface OutboxDao {
 
     @Query("DELETE FROM outbox_items WHERE id = :id")
     suspend fun delete(id: Int)
+
+    @Query("DELETE FROM outbox_items WHERE clientKey = :clientKey")
+    suspend fun deleteByClientKey(clientKey: String)
 
     @Query("UPDATE outbox_items SET attempts = attempts + 1 WHERE id = :id")
     suspend fun incrementAttempts(id: Int)

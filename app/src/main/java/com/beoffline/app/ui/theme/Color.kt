@@ -99,3 +99,17 @@ val TextDisabled = Color(0xFF8C8276)
 // Gradient stops kept for the few surfaces that still wash a background.
 val GradientStart = Color(0xFFF6E7E0)
 val GradientEnd = Color(0xFFF7F3ED)
+
+/**
+ * Secondary text on a filled [AccentPrimary] surface — a chat bubble's
+ * timestamp, a caption under accent-filled copy. White held back so it reads
+ * as the quieter line without dropping out of contrast (8.9:1 on AccentPrimary).
+ */
+val OnAccentDim = Color(0xD6FFFFFF)
+
+/**
+ * An @-mention inside an accent-filled bubble. [AccentBright] is the mention
+ * colour on the light ground; on clay it is nearly the background, so the
+ * highlight has to go the other way — pale, not darker.
+ */
+val OnAccentMention = AccentGlow
