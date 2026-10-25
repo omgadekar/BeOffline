@@ -195,6 +195,31 @@ chmod 600 /opt/beoffline-docker/.env
 
 `VERSION` is the only line that changes on a normal deploy.
 
+Now check what those five lines actually resolve to, rather than trusting that
+they do:
+
+```bash
+docker compose config | grep image:
+# image: builtbyom/sideprojects:beoffline-api-1.1.4
+```
+
+`APP` has to match the tag prefix you pushed, character for character —
+`beoffline.api` instead of `beoffline-api` is not a typo the registry can
+forgive, and it surfaces as a `not found` on the pull that reads like a missing
+image rather than a wrong name.
+
+And confirm the UID can read what it is about to be handed. This is the one
+that goes wrong quietly:
+
+```bash
+stat -c '%u %g %a %n' /opt/beoffline-api/appsettings.Production.json                       /etc/beoffline/firebase-service-account.json
+```
+
+The owner column of each must be `APP_UID`, or the file must be readable by
+`APP_GID`. Owned by root, or by a different user, and the container will start,
+serve, answer `/health` and fall back to `NullPushService` — push dead, nothing
+on the surface saying so.
+
 ---
 
 ## Part 3 — Build and push, every deploy
