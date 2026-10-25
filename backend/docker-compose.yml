@@ -1,20 +1,88 @@
-# Local dev database for the accountability API.
-#   docker compose up -d
-#   dotnet run --project src/BeOffline.Api
-# (appsettings.Development.json points at this instance; production runs on
-# the OCI VM's existing Postgres.)
-services:
-  postgres:
-    image: postgres:16
-    container_name: beoffline-postgres
-    environment:
-      POSTGRES_DB: beoffline
-      POSTGRES_USER: beoffline
-      POSTGRES_PASSWORD: beoffline_dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - beoffline-pgdata:/var/lib/postgresql/data
+# BeOffline API in a container, as a drop-in for the systemd unit.
+#
+# Deliberately the smallest possible change from the deployment that exists.
+# Postgres stays on the host, nginx stays on the host, the Cloudflare origin
+# certificate stays where it is, and Kestrel is still reachable only on
+# 127.0.0.1. The only thing that moves is how the app process is started and
+# how it is rolled back.
+#
+# See docs/BACKEND_DOCKER.md for the full deploy.
 
-volumes:
-  beoffline-pgdata:
+services:
+  api:
+    # Pulled from Docker Hub, not built here: the server does not need the
+    # source or the SDK. All three come from .env beside this file.
+    #
+    # Docker Hub has no nested paths — a repository holds tags, not folders,
+    # so builtbyom/sideprojects/beoffline-api is not a thing that can exist.
+    # Several projects sharing one private repo therefore share its tag
+    # namespace, and the project name has to live in the tag:
+    #
+    #     builtbyom/sideprojects:beoffline-api-1.1.4
+    #
+    # APP is that prefix and stays put; VERSION is the only line a deploy
+    # touches. Leaving VERSION unset fails here rather than quietly resolving
+    # to something that works today and means something else tomorrow.
+    image: ${IMAGE:-builtbyom/sideprojects}:${APP:-beoffline-api}-${VERSION:?set VERSION in .env, e.g. VERSION=1.1.4}
+    container_name: beoffline-api
+    restart: unless-stopped
+
+    # The host's own network stack, which is what makes this a drop-in.
+    #
+    # On a bridge network the container gets its own stack, and "localhost" in
+    # the Postgres connection string would then mean the container — so the
+    # connection string, Postgres's listen_addresses and pg_hba.conf would all
+    # have to change for a deployment that is otherwise unchanged. Sharing the
+    # host's stack means localhost still means the host, Postgres needs
+    # nothing, and nginx's proxy_pass keeps pointing at the same address.
+    network_mode: host
+
+    # The secrets below are mode 600 and owned by the host user, so the
+    # container has to BE that user to read them. The image's own default user
+    # (UID 1654) cannot, and the failure looks like the app starting fine and
+    # then falling back to NullPushService — push silently stops, nothing says
+    # why. `id -u` on the VM gives the number; it is 1000 for ubuntu.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+
+    volumes:
+      # Production config and secrets stay on the VM, owned by the VM, mounted
+      # read-only. Nothing secret is ever baked into the image.
+      - /opt/beoffline-api/appsettings.Production.json:/app/appsettings.Production.json:ro
+      - /etc/beoffline:/etc/beoffline:ro
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Kestrel__Endpoints__Http__Url, NOT ASPNETCORE_URLS.
+      #
+      # appsettings.json configures a Kestrel endpoint explicitly, and an
+      # endpoint defined in configuration beats ASPNETCORE_URLS outright —
+      # Kestrel says so and carries on binding the configured port:
+      #
+      #   Overriding address(es) 'http://127.0.0.1:5081'. Binding to endpoints
+      #   defined via IConfiguration and/or UseKestrel() instead.
+      #
+      # So the override has to be the same configuration key. Environment
+      # variables outrank JSON files, and __ is the section separator.
+      #
+      # Loopback only: with the host's network stack, binding every interface
+      # would publish the API straight to the internet — Docker writes its own
+      # iptables rules and does not consult ufw. nginx stays the only way in,
+      # exactly as today.
+      #
+      # API_PORT exists so a new image can be smoke-tested on 5081 before it
+      # takes 5080 off the systemd unit. Default is the real one.
+      Kestrel__Endpoints__Http__Url: http://127.0.0.1:${API_PORT:-5080}
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${API_PORT:-5080}/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+
+    # journald keeps `journalctl` working the way the runbook already
+    # describes, rather than leaving logs only in `docker logs`.
+    logging:
+      driver: journald
+      options:
+        tag: beoffline-api

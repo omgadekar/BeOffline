@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +7,34 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
+}
+
+/**
+ * Where a DEBUG build looks for the accountability API.
+ *
+ * This used to be hardcoded to http://10.0.2.2:5080/ — the emulator's alias
+ * for the host machine's loopback. On a real phone that address is nothing at
+ * all, so every API call failed with an IOException and the app said "No
+ * connection — try again when you're online" on a device that was perfectly
+ * online. Debug builds get installed on real hardware far more often than they
+ * get run in an emulator, so the deployed host is the better default.
+ *
+ * Point it somewhere else for a local backend, without touching this file:
+ *   local.properties   accountability.api.baseUrl=http://10.0.2.2:5080/
+ *   or                 ./gradlew -PaccountabilityApiBaseUrl=http://192.168.1.5:5080/
+ * Debug builds allow cleartext (see src/debug/AndroidManifest.xml), so a plain
+ * http:// override works. Release is unaffected and stays HTTPS-only.
+ */
+val debugApiBaseUrl: String = run {
+    val local = Properties().apply {
+        val file = rootProject.file("local.properties")
+        if (file.exists()) file.inputStream().use { load(it) }
+    }
+    val url = local.getProperty("accountability.api.baseUrl")
+        ?: providers.gradleProperty("accountabilityApiBaseUrl").orNull
+        ?: "https://beoffline-api.askthepolicy.com/"
+    // Retrofit rejects a baseUrl without one, and it is an easy thing to forget.
+    if (url.endsWith("/")) url else "$url/"
 }
 
 android {
@@ -19,8 +49,8 @@ android {
         // tabs instead of five, one block object instead of two rule types,
         // and a light theme. Play only cares that versionCode goes up, but
         // the name is what a user sees next to "What's new".
-        versionCode = 12
-        versionName = "1.1.2"
+        versionCode = 14
+        versionName = "1.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -47,10 +77,12 @@ android {
         }
         debug {
             isDebuggable = true
-            // Host machine as seen from an emulator (local Kestrel / docker).
+            // Defaults to the deployed host so a debug install on a real phone
+            // can reach the API; override for a local backend (see
+            // debugApiBaseUrl above).
             buildConfigField(
                 "String", "ACCOUNTABILITY_API_BASE_URL",
-                "\"http://10.0.2.2:5080/\""
+                "\"$debugApiBaseUrl\""
             )
         }
     }

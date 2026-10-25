@@ -1,9 +1,6 @@
 package com.beoffline.app.ui.screens
 
-import android.Manifest
 import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -92,13 +89,18 @@ fun WelcomeScreen(
 
     // The ongoing notification is how a person knows a block is running at all,
     // so ask for it once the first block exists rather than on a cold launch.
-    val notificationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { onFinished() }
+    // Going through the shared request records the ask, so the gate in the
+    // block creator and the row in Settings can both tell a refusal here from
+    // never having asked, and offer the settings switch instead of a dialog
+    // Android will not draw.
+    val notifications = rememberNotificationPermissionRequest(
+        openSettings = { onFinished() },
+        onResult = { onFinished() }
+    )
 
     fun finish() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            notifications.onTap()
         } else {
             onFinished()
         }

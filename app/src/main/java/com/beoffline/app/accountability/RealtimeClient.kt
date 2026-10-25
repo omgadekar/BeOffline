@@ -5,11 +5,14 @@ import com.beoffline.app.BuildConfig
 import com.google.firebase.auth.FirebaseAuth
 import com.microsoft.signalr.HubConnection
 import com.microsoft.signalr.HubConnectionBuilder
+import com.microsoft.signalr.HubConnectionState
 import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -31,6 +34,9 @@ class RealtimeClient @Inject constructor(
     companion object {
         private const val TAG = "RealtimeClient"
         private const val RETRY_DELAY_MS = 10_000L
+
+        /** How often the watchdog checks that the socket is still really up. */
+        private const val WATCHDOG_INTERVAL_MS = 30_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -42,19 +48,50 @@ class RealtimeClient @Inject constructor(
     @Volatile
     private var connection: HubConnection? = null
 
+    private var watchdog: Job? = null
+
     /** Called when the app comes to the foreground (and after sign-in). */
     fun start() {
         wantConnected = true
         ensureConnected()
+        startWatchdog()
     }
 
     /** Called when the app leaves the foreground — FCM takes over. */
     fun stop() {
         wantConnected = false
+        watchdog?.cancel()
+        watchdog = null
         val hub = connection
         connection = null
         if (hub != null) {
             scope.launch { runCatching { hub.stop().blockingAwait() } }
+        }
+    }
+
+    /**
+     * onClosed is the only thing that reconnects us, and it is not guaranteed
+     * to fire: a socket that dies with the network under it — a handover from
+     * Wi-Fi to mobile data, a doze window, a proxy dropping an idle
+     * connection — can leave a HubConnection sitting in DISCONNECTED with
+     * nobody told. From here that is indistinguishable from a quiet chat, and
+     * it is how a conversation ends up live in one direction only.
+     */
+    private fun startWatchdog() {
+        if (watchdog?.isActive == true) return
+        watchdog = scope.launch {
+            while (isActive && wantConnected) {
+                delay(WATCHDOG_INTERVAL_MS)
+                val hub = connection
+                if (hub == null) {
+                    ensureConnected()
+                } else if (hub.connectionState != HubConnectionState.CONNECTED) {
+                    Log.d(TAG, "Watchdog found a dead connection — reconnecting")
+                    connection = null
+                    runCatching { hub.stop().blockingAwait() }
+                    ensureConnected()
+                }
+            }
         }
     }
 

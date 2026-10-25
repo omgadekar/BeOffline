@@ -33,13 +33,27 @@ class OutboxWorker @AssistedInject constructor(
     companion object {
         private const val WORK_NAME = "accountability_outbox"
 
+        /**
+         * REPLACE, not KEEP. Unique work that asked to be retried sits in
+         * WorkManager's exponential backoff — up to five hours of it — and
+         * KEEP made every later enqueue a no-op for that whole window. One
+         * failed send was therefore enough to silence the queue: later
+         * messages and unlock requests were written to the outbox and simply
+         * never left the device, which is what "my messages stopped arriving
+         * on the other phone" looked like from the outside.
+         *
+         * Replacing cancels the waiting attempt and starts a fresh one now.
+         * Cancelling a drain that happens to be running is safe: every send is
+         * idempotent on its client key, and the rows stay in the outbox until
+         * the server has acknowledged them.
+         */
         fun enqueue(context: Context) {
             val work = OneTimeWorkRequestBuilder<OutboxWorker>()
                 .setConstraints(Constraints(requiredNetworkType = NetworkType.CONNECTED))
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
             WorkManager.getInstance(context)
-                .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.KEEP, work)
+                .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, work)
         }
     }
 
@@ -80,6 +94,10 @@ class HeartbeatWorker @AssistedInject constructor(
         if (FirebaseAuth.getInstance().currentUser == null) return Result.success()
 
         repository.heartbeat()
+        // A second, slower chance for anything the outbox still owes — the
+        // per-send enqueue is the fast path, this is the one that runs even if
+        // the app is never opened.
+        repository.drainOutbox()
 
         val hasActiveRules = openBlockRuleRepository.getActiveRulesOnce().isNotEmpty()
         val accessibilityOn = backgroundProtectionManager.isAccessibilityServiceEnabled()

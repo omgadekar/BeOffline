@@ -19,6 +19,18 @@ public sealed class GroupsController(AppDbContext db, INotificationService notif
     // Same unambiguous alphabet as pairing invites: no 0/O/1/I/L.
     private const string CodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
+    /// <summary>
+    /// Active group memberships one person may hold. There was no cap at all,
+    /// which left group creation unbounded: a loop could fill the table, and
+    /// every member of every one of those groups is somebody this account can
+    /// send unlock requests to. Ten matches the per-group member limit, and
+    /// both move together from configuration without a redeploy.
+    /// </summary>
+    private int MaxGroupsPerUser => config.GetValue("Accountability:GroupsPerUserMax", 10);
+
+    private Task<int> ActiveGroupCountAsync(string uid) =>
+        db.GroupMembers.CountAsync(m => m.Uid == uid && m.Status == GroupMemberStatus.Active);
+
     [HttpPost]
     public async Task<ActionResult<GroupDto>> Create(CreateGroupRequest request)
     {
@@ -28,6 +40,13 @@ public sealed class GroupsController(AppDbContext db, INotificationService notif
         var name = request.Name.Trim();
         if (name.Length is < 1 or > 64)
             return BadRequest(new { message = "Group name must be 1-64 characters." });
+
+        if (await ActiveGroupCountAsync(uid) >= MaxGroupsPerUser)
+            return Conflict(new
+            {
+                message = $"You are in {MaxGroupsPerUser} groups already, which is the limit. " +
+                          "Leave one to start another."
+            });
 
         var group = new ApproverGroup
         {
@@ -107,6 +126,15 @@ public sealed class GroupsController(AppDbContext db, INotificationService notif
         if (activeMembers.Count >= maxMembers)
             return Conflict(new { message = $"This group is full ({maxMembers} members max)." });
 
+        // Rejoining a group you are already a removed member of does not add a
+        // membership, so it is not counted against the cap.
+        if (existing is null && await ActiveGroupCountAsync(uid) >= MaxGroupsPerUser)
+            return Conflict(new
+            {
+                message = $"You are in {MaxGroupsPerUser} groups already, which is the limit. " +
+                          "Leave one to join another."
+            });
+
         // Anti-puppet, same rule as pairings: only a genuinely FIRST accountability
         // relationship on both sides activates immediately. If the group already
         // has real membership, or either side has relationships elsewhere, the new
@@ -182,8 +210,25 @@ public sealed class GroupsController(AppDbContext db, INotificationService notif
 
     /// <summary>
     /// Leave the group (uid == caller) or, as owner, remove another member.
-    /// Same mechanic as pairing removal: NOT instant — the membership keeps
-    /// working through a cooldown and every member is told immediately.
+    ///
+    /// These two are not the same act and no longer share a mechanic.
+    ///
+    /// <para><b>Leaving is immediate.</b> It used to run the same cooldown as
+    /// removing somebody, on the reasoning that quitting accountability should
+    /// cost something. That reasoning does not survive the case it actually
+    /// has to handle: someone in a group with a person they want away from.
+    /// Holding them in the conversation for another twelve hours is the app
+    /// taking the other side, and Play's user-generated-content policy expects
+    /// a way out of a chat that works when you press it. The cooldown also
+    /// bought very little — group membership grants approvers, it does not
+    /// enforce anything, so leaving one has never unlocked a thing.</para>
+    ///
+    /// <para><b>Removing somebody else still waits.</b> That is where the
+    /// friction belongs: an owner cannot quietly delete the people holding
+    /// them to something, and the person being removed gets notice and keeps
+    /// their access while it runs. The 1:1 pairing cooldown is likewise
+    /// unchanged — that relationship is the accountability contract itself.
+    /// </para>
     /// </summary>
     [HttpDelete("{id:guid}/members/{memberUid}")]
     public async Task<ActionResult<GroupDto>> RemoveMember(Guid id, string memberUid)
@@ -202,8 +247,16 @@ public sealed class GroupsController(AppDbContext db, INotificationService notif
         if (caller is null || target is null) return NotFound();
         if (memberUid != uid && group.OwnerUid != uid)
             return Forbid();
+        // Leaving comes before every other check except membership itself.
+        // Somebody the owner has already started removing is exactly the person
+        // most likely to want out now rather than in twelve hours, and making
+        // that a conflict would hand the timing to the person they want away
+        // from.
+        if (memberUid == uid)
+            return await LeaveNowAsync(group, members, target, now);
+
         if (target.RemovalRequestedAtUtc != null)
-            return Conflict(new { message = "Removal is already pending for this member." });
+            return Conflict(new { message = "That member is already being removed." });
 
         var cooldownHours = config.GetValue("Accountability:RemovalCooldownHours", 24);
         target.RemovalRequestedByUid = uid;
@@ -234,6 +287,47 @@ public sealed class GroupsController(AppDbContext db, INotificationService notif
 
         return await ToDtoAsync(group);
     }
+
+    /// <summary>
+    /// Takes someone out of a group there and then: out of the member list, out
+    /// of the chat, no longer an approver and no longer reachable through it.
+    /// An owner who leaves hands the group to the longest-standing member who
+    /// is staying, the same heir rule the sweep uses when a removal finalizes.
+    /// </summary>
+    private async Task<GroupDto> LeaveNowAsync(
+        ApproverGroup group, List<GroupMember> members, GroupMember target, DateTime now)
+    {
+        target.Status = GroupMemberStatus.Removed;
+        target.RemovalRequestedByUid = target.Uid;
+        target.RemovalRequestedAtUtc = now;
+        target.RemovalEffectiveAtUtc = now;
+
+        var remaining = members
+            .Where(m => m.Uid != target.Uid)
+            .OrderBy(m => m.JoinedAtUtc)
+            .ToList();
+        // Nobody left to hand it to leaves OwnerUid as it is, which is what the
+        // sweep does too: an empty group belongs to no one and is reachable by
+        // no one.
+        if (group.OwnerUid == target.Uid && remaining.Count > 0)
+            group.OwnerUid = remaining[0].Uid;
+
+        await db.SaveChangesAsync();
+
+        var leaverName = Names.First(await DisplayNameAsync(target.Uid), "A member");
+        foreach (var member in remaining)
+        {
+            await notifier.NotifyAsync(
+                member.Uid, "GROUP_MEMBER_LEFT",
+                new { groupId = group.Id, groupName = group.Name, uid = target.Uid },
+                group.Name, $"{leaverName} left the group.");
+        }
+
+        return await ToDtoAsync(group);
+    }
+
+    private async Task<string?> DisplayNameAsync(string uid) =>
+        (await db.Users.FindAsync(uid))?.DisplayName;
 
     private async Task<GroupDto> ToDtoAsync(ApproverGroup group)
     {

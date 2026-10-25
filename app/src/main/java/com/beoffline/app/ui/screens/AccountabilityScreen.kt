@@ -1,7 +1,6 @@
 package com.beoffline.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,17 +21,21 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,20 +43,23 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.beoffline.app.data.model.CachedUnlockRequest
 import com.beoffline.app.data.model.Partner
 import com.beoffline.app.ui.theme.AccentBright
-import com.beoffline.app.ui.theme.AccentPrimary
+import com.beoffline.app.ui.theme.AccentGlow
 import com.beoffline.app.ui.theme.AccentSecondary
 import com.beoffline.app.ui.theme.AccentSurfaceDim
 import com.beoffline.app.ui.theme.BoAvatar
@@ -62,10 +68,11 @@ import com.beoffline.app.ui.theme.BoChip
 import com.beoffline.app.ui.theme.BoEyebrow
 import com.beoffline.app.ui.theme.BoFadedDivider
 import com.beoffline.app.ui.theme.BoHairline
+import com.beoffline.app.ui.theme.BoInviteCode
 import com.beoffline.app.ui.theme.BoPrimaryButton
 import com.beoffline.app.ui.theme.BoSecondaryButton
 import com.beoffline.app.ui.theme.BoShape
-import com.beoffline.app.ui.theme.Brand700
+import com.beoffline.app.ui.theme.BoWideOutlineButton
 import com.beoffline.app.ui.theme.Brand800
 import com.beoffline.app.ui.theme.Brand900
 import com.beoffline.app.ui.theme.StatusDanger
@@ -87,15 +94,47 @@ import kotlinx.coroutines.delay
 @Composable
 fun AccountabilityScreen(
     onOpenChat: (String) -> Unit,
+    onOpenSettings: () -> Unit = {},
     viewModel: AccountabilityViewModel = hiltViewModel(),
     groupsViewModel: GroupsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val groupsState by groupsViewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var showGroupManager by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.checkConfiguration(context) }
+
+    // Notifications and the battery exemption are both granted outside this
+    // screen and come back without saying so.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshDelivery()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val notifications = rememberNotificationPermissionRequest(
+        openSettings = viewModel::openNotificationSettings,
+        onResult = { viewModel.refreshDelivery() }
+    )
+
+    // Ask once, as soon as there is a reason to: an account means somebody can
+    // now be asked to unlock something, and the answer arrives as a
+    // notification. Asking here rather than waiting for the first request is
+    // the difference between a nudge and a request that silently never lands.
+    // askIfPossible, not onTap — nobody tapped anything, so this may put the
+    // system dialog up but must never throw someone out into Settings. When
+    // the dialog is spent, the card below is what is left.
+    var askedThisVisit by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(uiState.signedIn, uiState.notificationsOn) {
+        if (uiState.signedIn && !uiState.notificationsOn && !askedThisVisit) {
+            askedThisVisit = true
+            notifications.askIfPossible()
+        }
+    }
 
     if (showGroupManager) {
         GroupsScreen(
@@ -117,7 +156,8 @@ fun AccountabilityScreen(
         ) {
             BoScreenHeaderWithName(
                 signedIn = uiState.signedIn,
-                userName = uiState.userName
+                userName = uiState.userName,
+                onOpenSettings = onOpenSettings
             )
             BoFadedDivider()
 
@@ -160,7 +200,19 @@ fun AccountabilityScreen(
                     return@LazyColumn
                 }
 
-                // Incoming requests first — they're time-critical.
+                // Before anything else: whether an answer can reach you at all.
+                if (!uiState.notificationsOn || !uiState.batteryUnrestricted) {
+                    item(key = "delivery") {
+                        DeliveryCard(
+                            notificationsOn = uiState.notificationsOn,
+                            batteryUnrestricted = uiState.batteryUnrestricted,
+                            onAllowNotifications = notifications.onTap,
+                            onAllowBattery = viewModel::requestBatteryExemption
+                        )
+                    }
+                }
+
+                // Incoming requests next — they're time-critical.
                 items(uiState.incomingPending, key = { it.id }) { request ->
                     IncomingRequestCard(
                         request = request,
@@ -221,16 +273,49 @@ fun AccountabilityScreen(
     }
 }
 
+/**
+ * Settings lives in the header on both tabs. The same 44dp target in the same
+ * corner, top-aligned so it does not shift when you move between them.
+ */
 @Composable
-private fun BoScreenHeaderWithName(signedIn: Boolean, userName: String?) {
-    Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 14.dp)) {
-        Text("People", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
-        Text(
-            text = if (signedIn) "Signed in as ${userName.firstName(fallback = "you")}" else "Not signed in",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextTertiary,
-            modifier = Modifier.padding(top = 3.dp)
-        )
+private fun BoScreenHeaderWithName(
+    signedIn: Boolean,
+    userName: String?,
+    onOpenSettings: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 22.dp, end = 12.dp, top = 16.dp, bottom = 14.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("People", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
+            Text(
+                text = if (signedIn) {
+                    "Signed in as ${userName.firstName(fallback = "you")}"
+                } else {
+                    "Not signed in"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextTertiary,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .clickable(role = Role.Button, onClick = onOpenSettings),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Outlined.Settings,
+                contentDescription = "Settings",
+                tint = TextSecondary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
     }
 }
 
@@ -341,6 +426,7 @@ private fun PartnerCard(
                         style = MaterialTheme.typography.labelLarge,
                         color = TextDisabled,
                         modifier = Modifier
+                            .minimumInteractiveComponentSize()
                             .clip(BoShape.Control)
                             .clickable(role = Role.Button) { onRemove(partner) }
                             .padding(horizontal = 6.dp, vertical = 4.dp)
@@ -369,29 +455,17 @@ private fun PartnerCard(
 
             uiState.inviteCode?.let { code ->
                 Spacer(Modifier.height(14.dp))
-                Text(
-                    "Share this code (valid 24h)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary
-                )
-                Text(
-                    text = code,
-                    style = MaterialTheme.typography.headlineMedium.copy(letterSpacing = 6.sp),
-                    color = AccentSecondary,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                BoInviteCode(code)
             }
 
             Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Create invite code",
-                style = MaterialTheme.typography.labelLarge,
-                color = AccentBright,
-                modifier = Modifier
-                    .clip(BoShape.Control)
-                    .border(1.dp, AccentPrimary, BoShape.Control)
-                    .clickable(enabled = !uiState.busy, role = Role.Button) { onCreateInvite() }
-                    .padding(horizontal = 13.dp, vertical = 9.dp)
+            // Full width and a real 48dp of height. This was a bare Text with
+            // 9dp of padding — about 38dp tall and only as wide as its own
+            // label — which took several tries to hit.
+            BoWideOutlineButton(
+                text = if (uiState.inviteCode == null) "Create invite code" else "Create a new code",
+                onClick = onCreateInvite,
+                enabled = !uiState.busy
             )
 
             Spacer(Modifier.height(12.dp))
@@ -418,12 +492,80 @@ private fun PartnerCard(
     }
 }
 
+/**
+ * The two switches that decide whether any of this tab works when the app is
+ * closed, which is every time that matters.
+ *
+ * Notifications alone are not enough on a good many phones. One UI and the
+ * other aggressive battery managers defer high-priority FCM data messages for
+ * a sleeping app, so an approval can sit undelivered until something else
+ * wakes the app — which reads exactly like the request never arrived.
+ */
+@Composable
+private fun DeliveryCard(
+    notificationsOn: Boolean,
+    batteryUnrestricted: Boolean,
+    onAllowNotifications: () -> Unit,
+    onAllowBattery: () -> Unit
+) {
+    BoCard(modifier = Modifier.fillMaxWidth(), accented = true) {
+        BoEyebrow("Answers may not reach you", color = AccentSecondary)
+        Text(
+            text = "A request, and the reply to it, arrive as a notification. " +
+                "Android has to be allowed to deliver one while the app is closed.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        if (!notificationsOn) {
+            DeliveryRow(
+                title = "Show notifications",
+                why = "Without this there is nothing to tell you somebody asked.",
+                onAllow = onAllowNotifications
+            )
+        }
+        if (!batteryUnrestricted) {
+            DeliveryRow(
+                title = "Keep running in the background",
+                why = "Android holds messages for a sleeping app. On some phones " +
+                    "that is hours, which is long past the point of being useful.",
+                onAllow = onAllowBattery
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeliveryRow(title: String, why: String, onAllow: () -> Unit) {
+    Column(modifier = Modifier.padding(top = 14.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+        Text(
+            text = why,
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+        Spacer(Modifier.height(10.dp))
+        BoWideOutlineButton(text = "Allow", onClick = onAllow)
+    }
+}
+
 @Composable
 private fun GroupsCard(
     groups: List<GroupUi>,
     onOpenChat: (String) -> Unit,
     onManage: () -> Unit
 ) {
+    // Ticks so a removal countdown on a row stays honest without the screen
+    // being left and reopened.
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            now = System.currentTimeMillis()
+        }
+    }
+
     BoCard(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BoEyebrow("Groups", modifier = Modifier.weight(1f))
@@ -432,6 +574,7 @@ private fun GroupsCard(
                 style = MaterialTheme.typography.labelLarge,
                 color = TextSecondary,
                 modifier = Modifier
+                    .minimumInteractiveComponentSize()
                     .clip(BoShape.Control)
                     .clickable(role = Role.Button, onClick = onManage)
                     .padding(horizontal = 4.dp, vertical = 2.dp)
@@ -473,10 +616,26 @@ private fun GroupsCard(
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(group.name, style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
+                    // Group requests are answered inside the chat, so the row
+                    // only points at them. It never offers a second Approve.
+                    val waiting = group.waiting
+                    val leavingIn = group.leavingAt?.takeIf { it > now }
                     Text(
-                        text = "${group.members.size} member" + if (group.members.size == 1) "" else "s",
+                        text = when {
+                            // Somebody else removing you is the only reason a
+                            // group hangs around now, so it says so.
+                            leavingIn != null ->
+                                "You leave this group in ${formatCooldownRemaining(leavingIn, now)}"
+                            waiting > 0 -> "$waiting waiting on an answer"
+                            else -> "${group.members.size} member" +
+                                if (group.members.size == 1) "" else "s"
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
+                        color = when {
+                            leavingIn != null -> StatusDanger
+                            waiting > 0 -> AccentSecondary
+                            else -> TextTertiary
+                        },
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
@@ -505,6 +664,7 @@ private fun RecentRequestsSection(
                 style = MaterialTheme.typography.labelLarge,
                 color = TextDisabled,
                 modifier = Modifier
+                    .minimumInteractiveComponentSize()
                     .clip(BoShape.Control)
                     .clickable(enabled = enabled, role = Role.Button, onClick = onClear)
                     .padding(horizontal = 4.dp, vertical = 2.dp)

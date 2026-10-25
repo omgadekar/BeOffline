@@ -16,11 +16,14 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -195,14 +198,13 @@ class BlockOverlayManager @Inject constructor(
             } catch (_: Exception) {
                 null
             }
-            // v1: no in-overlay chooser — the oldest-joined group is the target.
-            val group = try {
-                accountabilityRepository.firstGroup()
+            val groups = try {
+                accountabilityRepository.askableGroups()
             } catch (_: Exception) {
-                null
+                emptyList()
             }
             try {
-                showOverlay(appName, packageName, untilText, rule, partnerName, group)
+                showOverlay(appName, packageName, untilText, rule, partnerName, groups)
             } catch (e: Exception) {
                 // Never let overlay failure break enforcement — send-home already happened.
                 Log.e(TAG, "Failed to show block overlay", e)
@@ -261,7 +263,7 @@ class BlockOverlayManager @Inject constructor(
         untilText: String?,
         rule: OpenBlockRule?,
         partnerName: String?,
-        group: GroupCache?
+        groups: List<GroupCache>
     ) {
         val service = serviceRef?.get()
         val (windowManager, windowType) = when {
@@ -293,17 +295,15 @@ class BlockOverlayManager @Inject constructor(
                         untilText = untilText,
                         rule = rule,
                         partnerName = partnerName,
-                        groupName = group?.name,
+                        groups = groups.map { AskableGroup(it.groupId, it.name) },
                         challengeController = challengeController,
                         askPartner = {
                             accountabilityRepository.enqueueUnlockRequest(packageName, appName)
                         },
-                        askGroup = {
-                            group?.let {
-                                accountabilityRepository.enqueueUnlockRequest(
-                                    packageName, appName, groupId = it.groupId
-                                )
-                            }
+                        askGroup = { groupId ->
+                            accountabilityRepository.enqueueUnlockRequest(
+                                packageName, appName, groupId = groupId
+                            )
                         },
                         onChallengeStarted = ::cancelAutoDismiss,
                         onNeedsKeyboard = ::setFocusable,
@@ -399,9 +399,14 @@ private class OverlayLifecycleHost : LifecycleOwner, ViewModelStoreOwner, SavedS
 private sealed interface OverlayStage {
     data object Blocked : OverlayStage
     data class Challenge(val level: Int, val kind: ChallengeKind) : OverlayStage
+    /** Which group to ask, when there is more than one worth offering. */
+    data object PickGroup : OverlayStage
     /** [target] names who was asked — a partner's first name or the group's name. */
     data class AskSent(val target: String) : OverlayStage
 }
+
+/** A group the block screen can offer, flattened out of the cache. */
+private data class AskableGroup(val id: String, val name: String)
 
 @Composable
 private fun BlockOverlayRoot(
@@ -410,10 +415,10 @@ private fun BlockOverlayRoot(
     untilText: String?,
     rule: OpenBlockRule?,
     partnerName: String?,
-    groupName: String?,
+    groups: List<AskableGroup>,
     challengeController: ChallengeController,
     askPartner: suspend () -> Unit,
-    askGroup: suspend () -> Unit,
+    askGroup: suspend (String) -> Unit,
     onChallengeStarted: () -> Unit,
     onNeedsKeyboard: (Boolean) -> Unit,
     onDismiss: () -> Unit
@@ -427,6 +432,19 @@ private fun BlockOverlayRoot(
     // Not during a challenge — a stray drag should not throw away a set you
     // are three answers into. "Never mind" is the way out of that one.
     val swipeable = stage !is OverlayStage.Challenge
+
+    // Asking a group, from either the single button or the chooser.
+    fun ask(group: AskableGroup) {
+        onChallengeStarted()
+        scope.launch {
+            try {
+                askGroup(group.id)
+            } catch (_: Exception) {
+                // Outbox insert is local; a failure here is exceptional.
+            }
+            stage = OverlayStage.AskSent(group.name)
+        }
+    }
     val slide = remember { Animatable(0f) }
     val dismissDistance = with(LocalDensity.current) { 96.dp.toPx() }
 
@@ -469,7 +487,7 @@ private fun BlockOverlayRoot(
                 untilText = untilText,
                 showUnlock = rule != null,
                 partnerName = partnerName,
-                askGroupName = groupName,
+                groups = groups,
                 onDismiss = onDismiss,
                 onUnlock = {
                     if (rule != null) {
@@ -494,16 +512,14 @@ private fun BlockOverlayRoot(
                         stage = OverlayStage.AskSent(partnerName ?: "your partner")
                     }
                 },
-                onAskGroup = {
-                    onChallengeStarted()
-                    scope.launch {
-                        try {
-                            askGroup()
-                        } catch (_: Exception) {
-                        }
-                        stage = OverlayStage.AskSent(groupName ?: "your group")
-                    }
-                }
+                onAskGroup = ::ask,
+                onPickGroup = { stage = OverlayStage.PickGroup }
+            )
+
+            is OverlayStage.PickGroup -> PickGroupStage(
+                groups = groups,
+                onPick = ::ask,
+                onBack = { stage = OverlayStage.Blocked }
             )
 
             is OverlayStage.AskSent -> {
@@ -557,17 +573,74 @@ private fun BlockOverlayRoot(
     }
 }
 
+/**
+ * Which group to ask. Scrolls, because nothing caps how many groups someone
+ * can be in, and a list that runs off a full-screen overlay would leave the
+ * later ones unreachable from the one screen that needs them.
+ */
+@Composable
+private fun PickGroupStage(
+    groups: List<AskableGroup>,
+    onPick: (AskableGroup) -> Unit,
+    onBack: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
+    ) {
+        Text(
+            text = "Which group?",
+            style = MaterialTheme.typography.headlineMedium,
+            color = TextPrimary,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            text = "Whoever answers first decides.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextSecondary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 280.dp).padding(bottom = 10.dp)
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            groups.forEach { group ->
+                BoSecondaryButton(
+                    text = group.name,
+                    onClick = { onPick(group) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+        Text(
+            text = "Back",
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextDisabled,
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .clickable(role = Role.Button, onClick = onBack)
+                .padding(8.dp)
+        )
+    }
+}
+
 @Composable
 private fun BlockedStage(
     appName: String,
     untilText: String?,
     showUnlock: Boolean,
     partnerName: String?,
-    askGroupName: String?,
+    groups: List<AskableGroup>,
     onDismiss: () -> Unit,
     onUnlock: () -> Unit,
     onAskPartner: () -> Unit,
-    onAskGroup: () -> Unit
+    onAskGroup: (AskableGroup) -> Unit,
+    onPickGroup: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -611,10 +684,19 @@ private fun BlockedStage(
                 modifier = Modifier.fillMaxWidth()
             )
         }
-        if (askGroupName != null) {
+        // One group is named on the button; several become a chooser rather
+        // than a wall of buttons over whatever app you were about to open.
+        if (groups.size == 1) {
+            val only = groups.first()
             BoSecondaryButton(
-                text = "Ask $askGroupName",
-                onClick = onAskGroup,
+                text = "Ask ${only.name}",
+                onClick = { onAskGroup(only) },
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else if (groups.size > 1) {
+            BoSecondaryButton(
+                text = "Ask a group",
+                onClick = onPickGroup,
                 modifier = Modifier.fillMaxWidth()
             )
         }

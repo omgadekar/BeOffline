@@ -1,0 +1,18 @@
+# Keep the build context small and, more importantly, keep anything with a
+# secret in it out of the image. appsettings.Production.json is not in git, but
+# if one ever lands in this directory it must not be copied in — it is mounted
+# at runtime instead.
+**/bin/
+**/obj/
+**/publish/
+**/.vs/
+**/*.user
+appsettings.Production.json
+**/appsettings.Production.json
+tests/
+scripts/
+*.md
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml

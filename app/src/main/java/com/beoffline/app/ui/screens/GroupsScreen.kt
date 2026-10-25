@@ -41,13 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.beoffline.app.accountability.GroupMemberDto
 import com.beoffline.app.ui.theme.AccentPrimary
-import com.beoffline.app.ui.theme.AccentSecondary
+import com.beoffline.app.ui.theme.BoInviteCode
+import com.beoffline.app.ui.theme.BoWideOutlineButton
 import com.beoffline.app.ui.theme.Brand600
 import com.beoffline.app.ui.theme.Brand800
 import com.beoffline.app.ui.theme.Brand900
@@ -187,20 +186,13 @@ private fun GroupCard(
             )
         }
 
-        inviteCode?.let { code ->
-            Text("Share this code (valid 24h):", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-            Text(
-                code,
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.Bold, letterSpacing = 6.sp
-                ),
-                color = AccentSecondary
-            )
-        }
+        inviteCode?.let { code -> BoInviteCode(code) }
 
-        TextButton(onClick = onInvite, enabled = !busy) {
-            Text("Create invite code", color = AccentPrimary)
-        }
+        BoWideOutlineButton(
+            text = if (inviteCode == null) "Create invite code" else "Create a new code",
+            onClick = onInvite,
+            enabled = !busy
+        )
     }
 }
 
