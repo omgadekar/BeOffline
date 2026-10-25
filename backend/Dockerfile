@@ -41,7 +41,8 @@ COPY --from=build /app/publish .
 # compose sets. Left alone, the published appsettings.json binds
 # 127.0.0.1:5080 — right for host networking, and reachable from nowhere on a
 # bridge network, where that key has to become http://+:5080 instead.
-ENV ASPNETCORE_ENVIRONMENT=Production \n    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+ENV ASPNETCORE_ENVIRONMENT=Production \
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 
 EXPOSE 5080
 
