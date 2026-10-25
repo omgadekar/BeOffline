@@ -3,17 +3,16 @@
 # Deliberately the smallest possible change from the deployment that exists.
 # Postgres stays on the host, nginx stays on the host, the Cloudflare origin
 # certificate stays where it is, and Kestrel is still reachable only on
-# 127.0.0.1:5080. The only thing that moves is how the app process is started
-# and how it is rolled back.
+# 127.0.0.1. The only thing that moves is how the app process is started and
+# how it is rolled back.
 #
-# See docs/BACKEND_DOCKER.md.
+# See docs/BACKEND_DOCKER.md for the full deploy.
 
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: beoffline-api:${TAG:-latest}
+    # Pulled from Docker Hub, not built here: the server does not need the
+    # source or the SDK. IMAGE and TAG come from .env beside this file.
+    image: ${IMAGE:-beoffline-api}:${TAG:?set TAG in .env, e.g. TAG=1.1.4}
     container_name: beoffline-api
     restart: unless-stopped
 
@@ -23,13 +22,16 @@ services:
     # the Postgres connection string would then mean the container — so the
     # connection string, Postgres's listen_addresses and pg_hba.conf would all
     # have to change for a deployment that is otherwise unchanged. Sharing the
-    # host's stack means localhost still means the host, Postgres needs nothing,
-    # and nginx's proxy_pass keeps pointing at the same address.
-    #
-    # The cost is that the container does not get its own port namespace, which
-    # on a VM running one application is not much of a cost. BACKEND_DOCKER.md
-    # has the bridge-network variant if that changes.
+    # host's stack means localhost still means the host, Postgres needs
+    # nothing, and nginx's proxy_pass keeps pointing at the same address.
     network_mode: host
+
+    # The secrets below are mode 600 and owned by the host user, so the
+    # container has to BE that user to read them. The image's own default user
+    # (UID 1654) cannot, and the failure looks like the app starting fine and
+    # then falling back to NullPushService — push silently stops, nothing says
+    # why. `id -u` on the VM gives the number; it is 1000 for ubuntu.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
 
     volumes:
       # Production config and secrets stay on the VM, owned by the VM, mounted
@@ -39,14 +41,24 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # Overrides the image's default of http://+:5080. With the host's network
-      # stack, binding every interface would publish the API straight to the
-      # internet — Docker writes its own iptables rules and does not consult
-      # ufw. Loopback keeps nginx as the only way in, exactly as today.
-      ASPNETCORE_URLS: http://127.0.0.1:5080
+      # Loopback only: with the host's network stack, binding every interface
+      # would publish the API straight to the internet — Docker writes its own
+      # iptables rules and does not consult ufw. nginx stays the only way in,
+      # exactly as today.
+      #
+      # API_PORT exists so a new image can be smoke-tested on 5081 before it
+      # takes 5080 off the systemd unit. Default is the real one.
+      ASPNETCORE_URLS: http://127.0.0.1:${API_PORT:-5080}
 
-    # journald keeps `journalctl` working the way the runbook already describes,
-    # rather than leaving logs only in `docker logs`.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${API_PORT:-5080}/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+
+    # journald keeps `journalctl` working the way the runbook already
+    # describes, rather than leaving logs only in `docker logs`.
     logging:
       driver: journald
       options:

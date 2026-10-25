@@ -46,12 +46,19 @@ ENV ASPNETCORE_ENVIRONMENT=Production \
 EXPOSE 5080
 
 # start-period covers the first run after a schema change, where EF applies
-# migrations before the app starts serving.
+# migrations before the app starts serving. compose overrides this when the
+# port is overridden.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD curl -fsS http://localhost:5080/health || exit 1
 
 # Not root. The app writes nothing to disk — logs go to stdout, secrets are
 # mounted read-only — so it has no reason to be.
+#
+# This is the standalone default. compose overrides it with the host UID that
+# owns the mounted secrets: those files are mode 600, and a container running
+# as anyone else cannot read them. That failure is quiet — the app starts, the
+# Firebase service account is unreadable, and push falls back to the no-op
+# service with nothing on the surface to say so.
 USER $APP_UID
 
 ENTRYPOINT ["dotnet", "BeOffline.Api.dll"]

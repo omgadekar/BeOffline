@@ -49,8 +49,8 @@ android {
         // tabs instead of five, one block object instead of two rule types,
         // and a light theme. Play only cares that versionCode goes up, but
         // the name is what a user sees next to "What's new".
-        versionCode = 12
-        versionName = "1.1.2"
+        versionCode = 14
+        versionName = "1.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
