@@ -158,6 +158,13 @@ From Windows, send the compose file:
 scp D:\BeOffline\backend\docker-compose.yml ubuntu@<VM_IP>:/opt/beoffline-docker/
 ```
 
+Check it landed, because the next command that needs it reports its absence as
+`no configuration file provided: not found`, which says nothing about the copy:
+
+```bash
+ls -la /opt/beoffline-docker
+```
+
 Then on the VM, `nano /opt/beoffline-docker/.env`:
 
 ```ini
