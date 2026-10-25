@@ -233,20 +233,63 @@ dotnet test
 
 Tests first — there is no CI for the backend, so this is the only gate.
 
-```cmd
-docker build --platform linux/amd64 -t builtbyom/sideprojects:beoffline-api-1.1.4 .
-docker push builtbyom/sideprojects:beoffline-api-1.1.4
+**The VM is ARM64.** Check once and never guess:
+
+```bash
+uname -m        # aarch64 on the OCI Ampere instance; x86_64 elsewhere
 ```
 
-`--platform linux/amd64` is not optional if your machine is ARM — the image has
-to match the VM, and a wrong-architecture image pushes fine and then fails at
-`docker run` with `exec format error`.
+A single-architecture image built on an x86 laptop pushes perfectly and then
+cannot be pulled at all:
 
-A second tag costs nothing and makes a rollback target readable:
+```
+no matching manifest for linux/arm64/v8 in the manifest list entries
+```
+
+So build both, which also means the tag works wherever it is pulled — worth
+having in a repo several projects share. Once per machine:
 
 ```cmd
-docker tag builtbyom/sideprojects:beoffline-api-1.1.4 builtbyom/sideprojects:beoffline-api-dd0728b
-docker push builtbyom/sideprojects:beoffline-api-dd0728b
+docker buildx create --name multi --use
+```
+
+Then per release:
+
+```cmd
+docker buildx build --platform linux/amd64,linux/arm64 ^
+  -t builtbyom/sideprojects:beoffline-api-1.1.4 --push .
+```
+
+`buildx` pushes as part of the build, so there is no separate `docker push`,
+and `--load` is unavailable for a multi-platform build because a local image
+store holds one architecture at a time. The non-native half runs under QEMU
+emulation, so expect several minutes — the .NET SDK restore is the slow part.
+
+Too slow, or emulation misbehaving? Build natively on the VM instead. It needs
+the source and Docker, but **not** the .NET SDK, which lives in the build
+image:
+
+```bash
+sudo apt-get install -y git
+sudo mkdir -p /opt/beoffline-src && sudo chown ubuntu:ubuntu /opt/beoffline-src
+git clone https://github.com/omgadekar/BeOffline.git /opt/beoffline-src
+cd /opt/beoffline-src/backend
+docker build -t builtbyom/sideprojects:beoffline-api-1.1.4 .
+```
+
+Built on the VM it is already the right architecture and never has to leave the
+machine — skip the push and the pull, and `docker compose up -d` finds it
+locally.
+
+A second tag costs nothing and makes a rollback target readable. Pass both to
+the one build rather than re-tagging after it — a multi-platform image built
+with `--push` never lands in the local store, so there is nothing for
+`docker tag` to point at:
+
+```cmd
+docker buildx build --platform linux/amd64,linux/arm64 ^
+  -t builtbyom/sideprojects:beoffline-api-1.1.4 ^
+  -t builtbyom/sideprojects:beoffline-api-dd0728b --push .
 ```
 
 ---
@@ -338,8 +381,8 @@ Stopped and disabled, not deleted. The unit file stays as the way back.
 
 ```cmd
 cd D:\BeOffline\backend && dotnet test
-docker build --platform linux/amd64 -t builtbyom/sideprojects:beoffline-api-<new> .
-docker push builtbyom/sideprojects:beoffline-api-<new>
+docker buildx build --platform linux/amd64,linux/arm64 ^
+  -t builtbyom/sideprojects:beoffline-api-<new> --push .
 ```
 
 ```bash
@@ -397,8 +440,8 @@ know one project in this repo from another.
 
 **Every deploy**
 - [ ] `dotnet test` green
-- [ ] built `--platform linux/amd64`, tagged `beoffline-api-<version>`
-- [ ] `docker push`
+- [ ] built for the VM's architecture (`uname -m`), tagged `beoffline-api-<version>`
+- [ ] pushed — `buildx ... --push` does this as part of the build
 - [ ] `pg_dump` taken
 - [ ] `docker compose pull && up -d`, `ps` shows **healthy**
 - [ ] `/health` ok locally and through Cloudflare
