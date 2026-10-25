@@ -1,5 +1,18 @@
 # Deploying the BeOffline API
 
+> **The API runs in Docker now. Deploys go through
+> [`BACKEND_DOCKER.md`](BACKEND_DOCKER.md), not this file.**
+>
+> As of 2026-10-25 the systemd unit `beoffline-api` is stopped; the container
+> holds `127.0.0.1:5080` behind the same nginx. The publish-and-scp path below
+> still works and the unit file is deliberately still there, so starting it
+> again is the way back if Docker ever has to come out — but it is the
+> fallback, not the route.
+>
+> Everything else here is still current and still the reference: where things
+> live on the VM, what the production config carries, the verification steps,
+> and the troubleshooting table.
+
 How to ship `backend/` to the OCI VM it already runs on.
 
 **This is the update path.** For first-time setup — provisioning the VM, creating the database,
@@ -9,9 +22,7 @@ artifact (2026-07-20), which is what the live deployment was actually built from
 below matches it.
 
 **Scope.** This deploys the backend only. The Android work ships through Play — see
-`docs/RELEASE_BUILD.md`. For running the API as a container instead of under systemd — same
-VM, same nginx, same Postgres, but a deploy becomes a tag and a rollback becomes the previous
-tag — see `docs/BACKEND_DOCKER.md`.
+`docs/RELEASE_BUILD.md`.
 
 ---
 
@@ -132,6 +143,12 @@ before — check `git diff` before every commit that touches this file.
 ---
 
 ## 1. Test
+
+> Steps 1–5 are the **fallback** path, for a Docker outage or a deliberate
+> move back to systemd. The normal deploy is four commands in
+> [`BACKEND_DOCKER.md`](BACKEND_DOCKER.md) Part 5. Running this path while the
+> container holds 5080 will fail to bind — `systemctl stop` the container's
+> replacement first, which means `docker compose down`.
 
 ```bash
 cd backend && dotnet test
