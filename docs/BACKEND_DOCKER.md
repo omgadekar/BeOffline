@@ -143,8 +143,14 @@ so push stops with nothing on the surface saying why.
 The VM needs `docker-compose.yml` and a `.env`. It does **not** need the source.
 
 ```bash
-mkdir -p /opt/beoffline-docker
+sudo mkdir -p /opt/beoffline-docker && sudo chown ubuntu:ubuntu /opt/beoffline-docker
 ```
+
+Both halves matter. `/opt` is root-owned, so the `mkdir` needs `sudo` — and a
+directory made that way belongs to root, which `scp` cannot write into because
+it runs as `ubuntu` with no way to elevate. The symptom is
+`dest open "/opt/beoffline-docker/docker-compose.yml": Permission denied`, from
+the copy rather than from the `mkdir` that caused it.
 
 From Windows, send the compose file:
 
@@ -326,6 +332,7 @@ know one project in this repo from another.
 - [ ] `docker login -u builtbyom` done at both ends; `chmod 600 ~/.docker/config.json` on the VM
 - [ ] Docker installed on the VM, `ubuntu` in the `docker` group
 - [ ] `id -u` / `id -g` recorded
+- [ ] `/opt/beoffline-docker` created **and owned by `ubuntu`**
 - [ ] `docker-compose.yml` copied to `/opt/beoffline-docker/`
 - [ ] `.env` written with IMAGE / APP / VERSION / APP_UID / APP_GID, `chmod 600`
 
