@@ -52,6 +52,18 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # Kestrel__Endpoints__Http__Url, NOT ASPNETCORE_URLS.
+      #
+      # appsettings.json configures a Kestrel endpoint explicitly, and an
+      # endpoint defined in configuration beats ASPNETCORE_URLS outright —
+      # Kestrel says so and carries on binding the configured port:
+      #
+      #   Overriding address(es) 'http://127.0.0.1:5081'. Binding to endpoints
+      #   defined via IConfiguration and/or UseKestrel() instead.
+      #
+      # So the override has to be the same configuration key. Environment
+      # variables outrank JSON files, and __ is the section separator.
+      #
       # Loopback only: with the host's network stack, binding every interface
       # would publish the API straight to the internet — Docker writes its own
       # iptables rules and does not consult ufw. nginx stays the only way in,
@@ -59,7 +71,7 @@ services:
       #
       # API_PORT exists so a new image can be smoke-tested on 5081 before it
       # takes 5080 off the systemd unit. Default is the real one.
-      ASPNETCORE_URLS: http://127.0.0.1:${API_PORT:-5080}
+      Kestrel__Endpoints__Http__Url: http://127.0.0.1:${API_PORT:-5080}
 
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${API_PORT:-5080}/health || exit 1"]

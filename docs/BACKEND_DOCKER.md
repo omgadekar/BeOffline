@@ -330,6 +330,21 @@ docker compose logs --tail 50 | grep -i firebase
 Live traffic is still on 5080 through systemd; this only proves the image runs,
 reads its config and can see Postgres.
 
+`API_PORT` sets `Kestrel__Endpoints__Http__Url`, not `ASPNETCORE_URLS`.
+`appsettings.json` configures a Kestrel endpoint explicitly, and a configured
+endpoint outranks `ASPNETCORE_URLS` — Kestrel says as much and binds the
+configured port anyway:
+
+```
+Overriding address(es) 'http://127.0.0.1:5081'. Binding to endpoints defined
+via IConfiguration and/or UseKestrel() instead.
+Failed to bind to address http://127.0.0.1:5080: address already in use.
+```
+
+That is a container fighting systemd for 5080 and losing, in a restart loop,
+exiting 133 each time. If you see it, the compose file is older than this
+paragraph.
+
 **`NullPushService` in those logs means the UID is wrong** — the container
 cannot read `/etc/beoffline/firebase-service-account.json`. Fix `APP_UID` in
 `.env` and repeat. Do not carry this into the cutover; push is the whole

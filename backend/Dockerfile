@@ -34,14 +34,14 @@ RUN apt-get update \
 
 COPY --from=build /app/publish .
 
-# The published appsettings.json binds Kestrel to 127.0.0.1, which inside a
-# bridge-networked container means nothing outside it can connect. Binding all
-# interfaces is safe here precisely because the container is the boundary:
-# compose publishes the port on 127.0.0.1 of the host, so nginx still reaches
-# it and the internet still does not.
-ENV ASPNETCORE_ENVIRONMENT=Production \
-    ASPNETCORE_URLS=http://+:5080 \
-    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+# ASPNETCORE_URLS is deliberately not set: appsettings.json defines a Kestrel
+# endpoint explicitly, and a configured endpoint outranks it, so setting it
+# here would only produce a warning and be ignored. The override that works is
+# the same configuration key, Kestrel__Endpoints__Http__Url, which is what
+# compose sets. Left alone, the published appsettings.json binds
+# 127.0.0.1:5080 — right for host networking, and reachable from nowhere on a
+# bridge network, where that key has to become http://+:5080 instead.
+ENV ASPNETCORE_ENVIRONMENT=Production \n    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 
 EXPOSE 5080
 
