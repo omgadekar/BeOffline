@@ -395,6 +395,94 @@ Stopped and disabled, not deleted. The unit file stays as the way back.
 
 ---
 
+## Parking it, and switching later
+
+The tempting plan is to leave the container running on 5081 until the matching
+app release is approved, then move it to 5080. **Don't.** That is the one
+arrangement with all of the cost and none of the benefit:
+
+- **No traffic reaches it.** nginx proxies to 5080 only, so a container on 5081
+  serves nobody. It proves nothing beyond what the smoke test already proved.
+- **It still runs `SweepService`.** Two instances against one database both
+  expire requests, both finalize removals, both infer uninstalls. The guards
+  are per-row, not cross-process, so the visible result is people getting the
+  same notification twice.
+
+If you want to wait, stop it and keep the image:
+
+```bash
+docker compose down
+```
+
+`docker image ls builtbyom/sideprojects` still has it. Switch day is then three
+commands, and nothing has been running in the meantime.
+
+### Waiting for Play gains nothing here
+
+Check what the deploy actually changes before deciding to hold it:
+
+```bash
+git diff --stat origin/master...dev -- backend
+git diff origin/master...dev -- backend/src/BeOffline.Api/Contracts                                 backend/src/BeOffline.Api/Domain                                 backend/src/BeOffline.Api/Migrations
+```
+
+Empty second command means no route, DTO or schema change — which is the case
+for 1.1.4: only `GroupsController` behaviour and two config lines. The versions
+already on people's phones keep working against it exactly as before.
+
+**And the order runs the other way.** A backward-compatible backend means the
+old app is fine with the new server; it does not mean the new app is fine with
+the old one. 1.1.4 tells people leaving a group is immediate. If it reaches
+them while the server is still running the twelve-hour cooldown, the app is
+lying — and that is the version of this that users actually notice.
+
+So deploy the backend **before** the Play rollout, not after. Hold it only if
+you want a release where both halves change together and you are watching.
+
+### Switch day
+
+```bash
+cd /opt/beoffline-docker
+docker compose up -d                 # or `down` first if it is parked on 5081
+```
+
+Wait — if it is currently on 5081, stop that one before systemd gives up 5080,
+or the container will claim the port the moment it frees up and you lose the
+ordering:
+
+```bash
+docker compose down
+sudo systemctl stop beoffline-api
+docker compose up -d
+docker compose ps                    # healthy, not just running
+```
+
+Then Part 4.3's verification, in full — `/health` locally and through
+Cloudflare, **401** on `/api/pairing`, the service-account read, and the
+two-device approval. Only then:
+
+```bash
+sudo systemctl disable beoffline-api
+```
+
+If anything looks wrong at any point:
+
+```bash
+docker compose down && sudo systemctl start beoffline-api
+```
+
+Back to the old deployment in seconds, with the systemd unit never having been
+removed.
+
+### If the Play release is rolled back
+
+The backend does not need rolling back with it. It is compatible with the
+older app, which is what makes the order above safe: you can hold 1.1.4 on
+Play, or halt its rollout, without touching the server at all.
+
+---
+
+
 ## Part 5 — Every deploy after that
 
 ```cmd
