@@ -119,11 +119,25 @@ curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker ubuntu
 ```
 
-Log out and back in, then confirm:
+**Log out and back in.** Group membership is applied at login, so the shell
+that ran `usermod` does not have it, and neither does any session opened before
+it. Then confirm:
 
 ```bash
-docker --version && docker compose version
+docker ps
 ```
+
+`docker ps` and not `docker --version`: the version command only prints the
+client's own number and never touches the daemon, so it answers happily from a
+session with no access at all. `docker ps` talks to the socket, which is the
+thing being checked. If it says
+
+```
+permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+```
+
+the session still predates the group change — reconnect, or `newgrp docker` to
+get it in the shell you are already in.
 
 ### 2.2 Find the UID that owns the secrets
 
