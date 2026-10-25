@@ -211,7 +211,20 @@ Back up the database first. `Database:AutoMigrate` is on and a dump is the one
 thing a file copy cannot undo:
 
 ```bash
+mkdir -p ~/backups
 sudo -u postgres pg_dump beoffline | gzip > ~/backups/beoffline-$(date +%F-%H%M).sql.gz
+```
+
+The `mkdir` is not redundant on a rebuilt VM. The shell sets up the redirect
+before `pg_dump` runs, so a missing directory fails the line before the dump
+has started — and the error names the `.sql.gz` path rather than the directory,
+which reads like the dump failed when nothing was ever attempted.
+
+`BACKEND_DEPLOYMENT.md` says a nightly cron already writes here. Confirm that
+came across with the machine rather than assuming it:
+
+```bash
+crontab -l 2>/dev/null; sudo crontab -l 2>/dev/null; ls -la ~/backups
 ```
 
 ### 4.1 Smoke-test on a spare port, with systemd still serving
