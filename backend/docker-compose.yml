@@ -11,8 +11,19 @@
 services:
   api:
     # Pulled from Docker Hub, not built here: the server does not need the
-    # source or the SDK. IMAGE and TAG come from .env beside this file.
-    image: ${IMAGE:-beoffline-api}:${TAG:?set TAG in .env, e.g. TAG=1.1.4}
+    # source or the SDK. All three come from .env beside this file.
+    #
+    # Docker Hub has no nested paths — a repository holds tags, not folders,
+    # so builtbyom/sideprojects/beoffline-api is not a thing that can exist.
+    # Several projects sharing one private repo therefore share its tag
+    # namespace, and the project name has to live in the tag:
+    #
+    #     builtbyom/sideprojects:beoffline-api-1.1.4
+    #
+    # APP is that prefix and stays put; VERSION is the only line a deploy
+    # touches. Leaving VERSION unset fails here rather than quietly resolving
+    # to something that works today and means something else tomorrow.
+    image: ${IMAGE:-builtbyom/sideprojects}:${APP:-beoffline-api}-${VERSION:?set VERSION in .env, e.g. VERSION=1.1.4}
     container_name: beoffline-api
     restart: unless-stopped
 

@@ -1,7 +1,8 @@
 # Deploying the BeOffline API with Docker
 
-Build the image on your machine, push it to a **private Docker Hub repo**, pull
-it on the VM, run it. Replaces the `dotnet publish` + `scp -r publish/*` path in
+Build the image on your machine, push it to the private Docker Hub repo
+`builtbyom/sideprojects`, pull it on the VM, run it. Replaces the
+`dotnet publish` + `scp -r publish/*` path in
 [`BACKEND_DEPLOYMENT.md`](BACKEND_DEPLOYMENT.md), which stays valid — you can go
 back to it at any point, and the rollback step below is exactly that.
 
@@ -13,6 +14,36 @@ is a tag and a rollback is the previous tag. The VM also stops needing
 
 **Runtime stays .NET 8** — `sdk:8.0` to build, `aspnet:8.0` to run. Nothing here
 moves the project off it.
+
+---
+
+## One repo, several projects
+
+Docker Hub has no nested paths. A repository holds **tags**, not folders, so
+`builtbyom/sideprojects/beoffline-api` cannot exist. Projects sharing one
+private repo share its tag namespace, which means the project name has to live
+in the tag:
+
+```
+builtbyom/sideprojects:beoffline-api-1.1.4
+                       └── APP ──┘ └VERSION┘
+```
+
+| | |
+|---|---|
+| `IMAGE` | `builtbyom/sideprojects` — the repo |
+| `APP` | `beoffline-api` — fixed per project |
+| `VERSION` | `1.1.4` — the only line a deploy changes |
+
+Keep the `<app>-<version>` shape for anything else that lands in this repo.
+Without a prefix the first project to push `:1.2.0` silently takes a tag another
+one wanted, and on a shared repo that is a real collision rather than a
+hypothetical one.
+
+**No `latest`, ever.** It cannot be rolled back to, because it means something
+different after the next push — and in a shared repo it is ambiguous about
+*which project* it even refers to. `VERSION` has no default in
+`docker-compose.yml`: leaving it unset fails loudly instead.
 
 ---
 
@@ -30,11 +61,11 @@ rollback of last resort.
 
 ## Part 1 — Docker Hub, once
 
-### 1.1 Create the private repository
+### 1.1 The repository
 
-On hub.docker.com: **Repositories → Create repository**, name `beoffline-api`,
-visibility **Private**. Its full name is `<your-dockerhub-user>/beoffline-api` —
-that is the `IMAGE` value everywhere below.
+`builtbyom/sideprojects`, **Private**. If it does not exist yet:
+hub.docker.com → **Repositories → Create repository**, name `sideprojects`,
+visibility **Private**.
 
 ### 1.2 Two access tokens, not your password
 
@@ -42,19 +73,23 @@ that is the `IMAGE` value everywhere below.
 
 | Where | Description | Permission |
 |---|---|---|
-| Your Windows machine | `beoffline-build` | **Read & Write** |
+| Your Windows machine | `sideprojects-build` | **Read & Write** |
 | The VM | `beoffline-vm-pull` | **Read-only** |
 
-The token is shown once. A read-only token on the server means a stolen VM
-cannot push a poisoned image back to the repo, which is the whole reason for
-two.
+The token is shown once.
+
+> **Worth knowing on a shared repo.** Unless your Docker Hub plan offers
+> repository-scoped tokens, a personal access token covers **every** private
+> repo on the account. The VM's token is read-only, so the worst case is that a
+> compromised VM can pull your other side projects' images — not push to them.
+> Scope it to `sideprojects` if your plan lets you.
 
 ### 1.3 Log in at both ends
 
 On Windows:
 
 ```cmd
-docker login -u <your-dockerhub-user>
+docker login -u builtbyom
 ```
 
 Paste the **Read & Write** token as the password.
@@ -62,14 +97,15 @@ Paste the **Read & Write** token as the password.
 On the VM, after Part 2 installs Docker:
 
 ```bash
-docker login -u <your-dockerhub-user>
+docker login -u builtbyom
+chmod 600 ~/.docker/config.json
 ```
 
 Paste the **Read-only** token.
 
-> `docker login` writes the token base64-encoded (not encrypted) into
+> `docker login` writes the token base64-encoded, not encrypted, into
 > `~/.docker/config.json`. On the VM that is a read-only token, which is the
-> point. `chmod 600 ~/.docker/config.json`.
+> point.
 
 ---
 
@@ -119,8 +155,9 @@ scp D:\BeOffline\backend\docker-compose.yml ubuntu@<VM_IP>:/opt/beoffline-docker
 Then on the VM, `nano /opt/beoffline-docker/.env`:
 
 ```ini
-IMAGE=<your-dockerhub-user>/beoffline-api
-TAG=1.1.4
+IMAGE=builtbyom/sideprojects
+APP=beoffline-api
+VERSION=1.1.4
 APP_UID=1000
 APP_GID=1000
 ```
@@ -129,7 +166,7 @@ APP_GID=1000
 chmod 600 /opt/beoffline-docker/.env
 ```
 
-`TAG` is the only line that changes on a normal deploy.
+`VERSION` is the only line that changes on a normal deploy.
 
 ---
 
@@ -145,22 +182,19 @@ dotnet test
 Tests first — there is no CI for the backend, so this is the only gate.
 
 ```cmd
-docker build --platform linux/amd64 -t <your-dockerhub-user>/beoffline-api:1.1.4 .
-docker push <your-dockerhub-user>/beoffline-api:1.1.4
+docker build --platform linux/amd64 -t builtbyom/sideprojects:beoffline-api-1.1.4 .
+docker push builtbyom/sideprojects:beoffline-api-1.1.4
 ```
 
 `--platform linux/amd64` is not optional if your machine is ARM — the image has
-to match the VM, and a wrong-architecture image fails at `docker run` with an
-`exec format error` after a successful push.
+to match the VM, and a wrong-architecture image pushes fine and then fails at
+`docker run` with `exec format error`.
 
-**Tag with a real version, never `latest`.** `latest` cannot be rolled back to,
-because it means something different after the next push. Matching the app
-version (`1.1.4`) keeps the two readable together; a commit sha works just as
-well. To tag an image you already built:
+A second tag costs nothing and makes a rollback target readable:
 
 ```cmd
-docker tag <your-dockerhub-user>/beoffline-api:1.1.4 <your-dockerhub-user>/beoffline-api:1f6d007
-docker push <your-dockerhub-user>/beoffline-api:1f6d007
+docker tag builtbyom/sideprojects:beoffline-api-1.1.4 builtbyom/sideprojects:beoffline-api-dd0728b
+docker push builtbyom/sideprojects:beoffline-api-dd0728b
 ```
 
 ---
@@ -185,8 +219,8 @@ curl -s http://127.0.0.1:5081/health          # {"status":"ok"}
 docker compose logs --tail 50 | grep -i firebase
 ```
 
-Live traffic is still on 5080 through systemd; this is only proving the image
-runs, reads its config and can see Postgres.
+Live traffic is still on 5080 through systemd; this only proves the image runs,
+reads its config and can see Postgres.
 
 **`NullPushService` in those logs means the UID is wrong** — the container
 cannot read `/etc/beoffline/firebase-service-account.json`. Fix `APP_UID` in
@@ -239,14 +273,14 @@ Stopped and disabled, not deleted. The unit file stays as the way back.
 
 ```cmd
 cd D:\BeOffline\backend && dotnet test
-docker build --platform linux/amd64 -t <user>/beoffline-api:<new-tag> .
-docker push <user>/beoffline-api:<new-tag>
+docker build --platform linux/amd64 -t builtbyom/sideprojects:beoffline-api-<new> .
+docker push builtbyom/sideprojects:beoffline-api-<new>
 ```
 
 ```bash
 ssh ubuntu@<VM_IP>
 cd /opt/beoffline-docker
-sed -i 's/^TAG=.*/TAG=<new-tag>/' .env
+sed -i 's/^VERSION=.*/VERSION=<new>/' .env
 docker compose pull && docker compose up -d
 docker compose ps && curl -s http://127.0.0.1:5080/health
 ```
@@ -256,7 +290,7 @@ Four lines, and the old image is still on the VM.
 ### Rolling back
 
 ```bash
-sed -i 's/^TAG=.*/TAG=<previous-tag>/' .env
+sed -i 's/^VERSION=.*/VERSION=<previous>/' .env
 docker compose up -d
 ```
 
@@ -273,27 +307,31 @@ That is the old deployment back, untouched.
 ### Housekeeping
 
 ```bash
-docker image ls <user>/beoffline-api          # keep the last few tags
-docker image prune -a --filter "until=720h"   # anything older than a month
-journalctl -t beoffline-api -f                # logs, as before
+# This project's tags only — the repo holds other projects too.
+docker image ls builtbyom/sideprojects --filter 'reference=*:beoffline-api-*'
+docker image rm builtbyom/sideprojects:beoffline-api-<old>
+journalctl -t beoffline-api -f
 ```
+
+Prefer removing old tags by name over `docker image prune -a`, which does not
+know one project in this repo from another.
 
 ---
 
 ## Checklist
 
 **Once**
-- [ ] Private repo `beoffline-api` created on Docker Hub
+- [ ] `builtbyom/sideprojects` exists and is **Private**
 - [ ] Read & Write token on Windows, Read-only token on the VM
-- [ ] `docker login` done at both ends; `chmod 600 ~/.docker/config.json` on the VM
+- [ ] `docker login -u builtbyom` done at both ends; `chmod 600 ~/.docker/config.json` on the VM
 - [ ] Docker installed on the VM, `ubuntu` in the `docker` group
 - [ ] `id -u` / `id -g` recorded
 - [ ] `docker-compose.yml` copied to `/opt/beoffline-docker/`
-- [ ] `.env` written with IMAGE / TAG / APP_UID / APP_GID, `chmod 600`
+- [ ] `.env` written with IMAGE / APP / VERSION / APP_UID / APP_GID, `chmod 600`
 
 **Every deploy**
 - [ ] `dotnet test` green
-- [ ] `docker build --platform linux/amd64` with a real version tag
+- [ ] built `--platform linux/amd64`, tagged `beoffline-api-<version>`
 - [ ] `docker push`
 - [ ] `pg_dump` taken
 - [ ] `docker compose pull && up -d`, `ps` shows **healthy**
