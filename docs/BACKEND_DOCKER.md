@@ -324,7 +324,7 @@ docker compose pull
 API_PORT=5081 docker compose up -d
 sleep 20
 curl -s http://127.0.0.1:5081/health          # {"status":"ok"}
-docker compose logs --tail 50 | grep -i firebase
+docker compose exec api head -c 40 /etc/beoffline/firebase-service-account.json
 ```
 
 Live traffic is still on 5080 through systemd; this only proves the image runs,
@@ -345,10 +345,13 @@ That is a container fighting systemd for 5080 and losing, in a restart loop,
 exiting 133 each time. If you see it, the compose file is older than this
 paragraph.
 
-**`NullPushService` in those logs means the UID is wrong** — the container
-cannot read `/etc/beoffline/firebase-service-account.json`. Fix `APP_UID` in
-`.env` and repeat. Do not carry this into the cutover; push is the whole
-accountability loop.
+**That read is the check, not the logs.** Neither branch of the Firebase setup
+logs anything at startup — `NullPushService` only announces itself when a push
+is actually attempted — so grepping the startup logs for it proves nothing
+either way. Reading the file as the container's own user does: JSON back means
+`FcmPushService` gets selected, and a permission error means the UID is wrong
+and push would quietly no-op. Fix `APP_UID` in `.env` and repeat; do not carry
+it into the cutover, because push is the whole accountability loop.
 
 > **Only safe because this deploy has no migration.** Two instances against one
 > database both run `SweepService` and both apply migrations at start. When a
